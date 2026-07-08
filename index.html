@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ideo CSV Editor</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>Ideo</h1>
+          <p>Online CSV editor</p>
+        </div>
+        <div class="top-actions">
+          <button id="copy-view" type="button" title="Copy current view">Copy</button>
+          <button id="download-view" type="button" title="Download current view">Download</button>
+        </div>
+      </header>
+
+      <details id="import-panel" class="import-panel" open>
+        <summary>
+          <span id="import-summary">Import CSV</span>
+          <span id="import-meta">Drop, choose, or paste data</span>
+        </summary>
+        <section id="drop-zone" class="import-body" aria-label="CSV input">
+          <div class="import-controls">
+            <label>
+              Separator
+              <select id="separator">
+                <option value="auto">Auto</option>
+                <option value=",">Comma</option>
+                <option value=";">Semicolon</option>
+                <option value="tab">Tab</option>
+                <option value="|">Pipe</option>
+              </select>
+            </label>
+            <input id="file-input" type="file" accept=".csv,text/csv,text/plain">
+            <button id="choose-file" type="button">Choose file</button>
+            <button id="load-paste" type="button">Import</button>
+            <button id="sample-data" type="button">Sample</button>
+          </div>
+          <textarea id="csv-input" spellcheck="false" placeholder="Drop a CSV file here or paste CSV content"></textarea>
+        </section>
+      </details>
+
+      <section class="status-row" aria-live="polite">
+        <div id="validation" class="status-card">No CSV loaded.</div>
+        <div id="table-stats" class="status-card">0 rows, 0 columns</div>
+      </section>
+
+      <section class="workspace">
+        <aside class="filters-panel" aria-label="Filters">
+          <div class="panel-heading">
+            <h2>Filters</h2>
+            <button id="add-filter" type="button">Add</button>
+          </div>
+          <div id="filters-list" class="filters-list"></div>
+        </aside>
+
+        <section class="table-panel" aria-label="CSV table">
+          <div id="table-wrap" class="table-wrap"></div>
+        </section>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
