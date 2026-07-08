@@ -26,7 +26,9 @@ const els = {
   addFilter: document.querySelector("#add-filter"),
   filtersList: document.querySelector("#filters-list"),
   copyView: document.querySelector("#copy-view"),
+  copyMarkdown: document.querySelector("#copy-markdown"),
   downloadView: document.querySelector("#download-view"),
+  downloadXlsx: document.querySelector("#download-xlsx"),
 };
 
 const sample = `name,status,count,error
@@ -782,6 +784,24 @@ function currentViewCsv() {
   return toCsv(viewDataRowsOnly(), state.separator);
 }
 
+function markdownCell(value) {
+  return String(value ?? "")
+    .replaceAll("\\", "\\\\")
+    .replaceAll("|", "\\|")
+    .replace(/\r?\n/g, "<br>");
+}
+
+function currentViewMarkdown() {
+  const rows = viewDataRowsOnly();
+  if (!rows.length) return "";
+  const width = Math.max(...rows.map((row) => row.length));
+  const normalized = rows.map((row) => Array.from({ length: width }, (_, index) => markdownCell(row[index])));
+  const header = normalized[0];
+  const separator = Array.from({ length: width }, () => "---");
+  const body = normalized.slice(1);
+  return [header, separator, ...body].map((row) => `| ${row.join(" | ")} |`).join("\n");
+}
+
 function downloadView() {
   const blob = new Blob([currentViewCsv()], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -792,8 +812,7 @@ function downloadView() {
   URL.revokeObjectURL(url);
 }
 
-async function copyView() {
-  const text = currentViewCsv();
+async function copyText(text) {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
   } else {
@@ -804,6 +823,185 @@ async function copyView() {
     document.execCommand("copy");
     textarea.remove();
   }
+}
+
+async function copyView() {
+  await copyText(currentViewCsv());
+}
+
+async function copyMarkdown() {
+  await copyText(currentViewMarkdown());
+}
+
+function xmlEscape(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function columnName(index) {
+  let name = "";
+  let number = index + 1;
+  while (number > 0) {
+    number -= 1;
+    name = String.fromCharCode(65 + (number % 26)) + name;
+    number = Math.floor(number / 26);
+  }
+  return name;
+}
+
+function worksheetXml(rows) {
+  const sheetData = rows
+    .map((row, rowIndex) => {
+      const cells = row
+        .map((value, colIndex) => {
+          const ref = `${columnName(colIndex)}${rowIndex + 1}`;
+          return `<c r="${ref}" t="inlineStr"><is><t>${xmlEscape(value)}</t></is></c>`;
+        })
+        .join("");
+      return `<row r="${rowIndex + 1}">${cells}</row>`;
+    })
+    .join("");
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>${sheetData}</sheetData>
+</worksheet>`;
+}
+
+function crc32(bytes) {
+  let crc = -1;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+  }
+  return (crc ^ -1) >>> 0;
+}
+
+function writeUint16(bytes, value) {
+  bytes.push(value & 255, (value >>> 8) & 255);
+}
+
+function writeUint32(bytes, value) {
+  bytes.push(value & 255, (value >>> 8) & 255, (value >>> 16) & 255, (value >>> 24) & 255);
+}
+
+function createZip(files) {
+  const encoder = new TextEncoder();
+  const bytes = [];
+  const central = [];
+
+  for (const file of files) {
+    const nameBytes = encoder.encode(file.name);
+    const data = encoder.encode(file.content);
+    const crc = crc32(data);
+    const offset = bytes.length;
+
+    writeUint32(bytes, 0x04034b50);
+    writeUint16(bytes, 20);
+    writeUint16(bytes, 0);
+    writeUint16(bytes, 0);
+    writeUint16(bytes, 0);
+    writeUint16(bytes, 0);
+    writeUint32(bytes, crc);
+    writeUint32(bytes, data.length);
+    writeUint32(bytes, data.length);
+    writeUint16(bytes, nameBytes.length);
+    writeUint16(bytes, 0);
+    bytes.push(...nameBytes, ...data);
+
+    central.push({ nameBytes, dataLength: data.length, crc, offset });
+  }
+
+  const centralStart = bytes.length;
+  for (const entry of central) {
+    writeUint32(bytes, 0x02014b50);
+    writeUint16(bytes, 20);
+    writeUint16(bytes, 20);
+    writeUint16(bytes, 0);
+    writeUint16(bytes, 0);
+    writeUint16(bytes, 0);
+    writeUint16(bytes, 0);
+    writeUint32(bytes, entry.crc);
+    writeUint32(bytes, entry.dataLength);
+    writeUint32(bytes, entry.dataLength);
+    writeUint16(bytes, entry.nameBytes.length);
+    writeUint16(bytes, 0);
+    writeUint16(bytes, 0);
+    writeUint16(bytes, 0);
+    writeUint16(bytes, 0);
+    writeUint32(bytes, 0);
+    writeUint32(bytes, entry.offset);
+    bytes.push(...entry.nameBytes);
+  }
+
+  const centralSize = bytes.length - centralStart;
+  writeUint32(bytes, 0x06054b50);
+  writeUint16(bytes, 0);
+  writeUint16(bytes, 0);
+  writeUint16(bytes, central.length);
+  writeUint16(bytes, central.length);
+  writeUint32(bytes, centralSize);
+  writeUint32(bytes, centralStart);
+  writeUint16(bytes, 0);
+
+  return new Uint8Array(bytes);
+}
+
+function createXlsx(rows) {
+  return createZip([
+    {
+      name: "[Content_Types].xml",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>`,
+    },
+    {
+      name: "_rels/.rels",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`,
+    },
+    {
+      name: "xl/workbook.xml",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="CSV" sheetId="1" r:id="rId1"/></sheets>
+</workbook>`,
+    },
+    {
+      name: "xl/_rels/workbook.xml.rels",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>`,
+    },
+    {
+      name: "xl/worksheets/sheet1.xml",
+      content: worksheetXml(rows),
+    },
+  ]);
+}
+
+function downloadXlsx() {
+  const blob = new Blob([createXlsx(viewDataRowsOnly())], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "ideo-view.xlsx";
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function readFile(file) {
@@ -845,6 +1043,8 @@ els.dropZone.addEventListener("drop", (event) => {
 els.addFilter.addEventListener("click", addFilter);
 els.downloadView.addEventListener("click", downloadView);
 els.copyView.addEventListener("click", copyView);
+els.copyMarkdown.addEventListener("click", copyMarkdown);
+els.downloadXlsx.addEventListener("click", downloadXlsx);
 window.addEventListener("resize", queueRenderedRowHeightUpdate);
 
 render();
