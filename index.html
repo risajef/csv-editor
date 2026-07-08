@@ -14,8 +14,12 @@
           <p>Online CSV editor</p>
         </div>
         <div class="top-actions">
-          <button id="copy-view" type="button" title="Copy current view">Copy</button>
-          <button id="download-view" type="button" title="Download current view">Download</button>
+          <button id="copy-view" class="icon-button" type="button" title="Copy current view" aria-label="Copy current view">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+          </button>
+          <button id="download-view" class="icon-button" type="button" title="Download current view" aria-label="Download current view">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
+          </button>
         </div>
       </header>
 
@@ -26,8 +30,8 @@
         </summary>
         <section id="drop-zone" class="import-body" aria-label="CSV input">
           <div class="import-controls">
-            <label>
-              Separator
+            <label class="separator-control" title="Separator">
+              <span class="sr-only">Separator</span>
               <select id="separator">
                 <option value="auto">Auto</option>
                 <option value=",">Comma</option>
@@ -37,9 +41,15 @@
               </select>
             </label>
             <input id="file-input" type="file" accept=".csv,text/csv,text/plain">
-            <button id="choose-file" type="button">Choose file</button>
-            <button id="load-paste" type="button">Import</button>
-            <button id="sample-data" type="button">Sample</button>
+            <button id="choose-file" class="icon-button" type="button" title="Choose file" aria-label="Choose file">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4l2 2h8c1.1 0 2 .9 2 2v9c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2l.01-11c0-1.1.89-2 1.99-2h6zm0 4H4v9h16V8H10z"/></svg>
+            </button>
+            <button id="load-paste" class="icon-button" type="button" title="Import" aria-label="Import">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4v6H9V9H5l7-7 7 7z"/></svg>
+            </button>
+            <button id="sample-data" class="icon-button" type="button" title="Load sample" aria-label="Load sample">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-8 14H7v-2h4v2zm6-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+            </button>
           </div>
           <textarea id="csv-input" spellcheck="false" placeholder="Drop a CSV file here or paste CSV content"></textarea>
         </section>
@@ -54,7 +64,9 @@
         <aside class="filters-panel" aria-label="Filters">
           <div class="panel-heading">
             <h2>Filters</h2>
-            <button id="add-filter" type="button">Add</button>
+            <button id="add-filter" class="icon-button" type="button" title="Add filter" aria-label="Add filter">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            </button>
           </div>
           <div id="filters-list" class="filters-list"></div>
         </aside>

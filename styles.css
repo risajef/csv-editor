@@ -11,7 +11,7 @@
   --danger: #b43434;
   --warn: #8b6200;
   --numeric: #e7f3ff;
-  --shadow: 0 8px 24px rgba(33, 45, 52, 0.08);
+  --shadow: none;
 }
 
 * {
@@ -35,15 +35,16 @@ textarea {
 
 button,
 select {
-  min-height: 36px;
+  min-height: 24px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 0;
   background: #fff;
   color: var(--ink);
 }
 
 button {
-  padding: 0 12px;
+  min-width: 24px;
+  padding: 0 6px;
   cursor: pointer;
   font-weight: 650;
 }
@@ -61,27 +62,27 @@ button:disabled {
 .app-shell {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 4px;
   min-height: 100vh;
-  padding: 20px;
+  padding: 4px;
 }
 
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 8px;
 }
 
 .topbar h1 {
   margin: 0;
-  font-size: clamp(28px, 4vw, 42px);
+  font-size: 20px;
   line-height: 1;
   letter-spacing: 0;
 }
 
 .topbar p {
-  margin: 6px 0 0;
+  margin: 0;
   color: var(--muted);
 }
 
@@ -94,7 +95,7 @@ button:disabled {
 .cell-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
   flex-wrap: wrap;
 }
 
@@ -113,7 +114,7 @@ button:disabled {
 .status-card {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 0;
   box-shadow: var(--shadow);
 }
 
@@ -126,8 +127,8 @@ button:disabled {
   grid-template-columns: auto 1fr;
   gap: 10px;
   align-items: center;
-  min-height: 46px;
-  padding: 0 14px;
+  min-height: 30px;
+  padding: 0 6px;
   cursor: pointer;
   font-weight: 800;
 }
@@ -147,8 +148,8 @@ button:disabled {
 
 .import-body {
   display: grid;
-  gap: 10px;
-  padding: 0 14px 14px;
+  gap: 4px;
+  padding: 0 6px 6px;
   border-top: 1px solid var(--line);
 }
 
@@ -157,24 +158,44 @@ button:disabled {
 }
 
 .import-controls {
-  padding-top: 12px;
+  padding-top: 4px;
+  flex-wrap: nowrap;
 }
 
 .import-controls label,
 .filter-row label {
   display: grid;
-  gap: 5px;
+  gap: 2px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
+}
+
+.separator-control {
+  display: block;
+}
+
+.separator-control select {
+  min-width: 96px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 textarea {
   width: 100%;
-  min-height: 118px;
+  min-height: 52px;
   border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 10px;
+  border-radius: 0;
+  padding: 4px;
   color: var(--ink);
 }
 
@@ -185,13 +206,14 @@ textarea {
 .status-row {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 12px;
+  gap: 4px;
 }
 
 .status-card {
-  min-height: 44px;
-  padding: 12px;
+  min-height: 26px;
+  padding: 4px 6px;
   box-shadow: none;
+  font-size: 13px;
 }
 
 .status-card.ok {
@@ -204,14 +226,14 @@ textarea {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
-  gap: 12px;
-  min-height: 420px;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: 4px;
+  min-height: 0;
 }
 
 .filters-panel {
   align-self: start;
-  padding: 10px;
+  padding: 4px;
 }
 
 .panel-heading {
@@ -220,14 +242,14 @@ textarea {
 
 .panel-heading h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   letter-spacing: 0;
 }
 
 .filters-list {
   display: grid;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 2px;
+  margin-top: 4px;
 }
 
 .empty-note {
@@ -238,23 +260,24 @@ textarea {
 .filter-row {
   display: grid;
   grid-template-columns: 20px minmax(70px, 1fr) 60px minmax(52px, 0.8fr) 26px;
-  gap: 5px;
+  gap: 2px;
   align-items: center;
-  min-height: 34px;
+  min-height: 26px;
 }
 
 .filter-row select,
 .filter-row input,
 .import-controls select {
   width: 100%;
-  padding: 0 8px;
+  padding: 0 4px;
+  font-size: 12px;
 }
 
 .filter-row select,
 .filter-row input {
-  min-height: 30px;
+  min-height: 24px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 0;
   background: #fff;
 }
 
@@ -269,8 +292,8 @@ textarea {
 }
 
 .filter-toggle input {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   accent-color: var(--accent);
 }
 
@@ -281,12 +304,12 @@ textarea {
 
 .table-wrap {
   overflow: auto;
-  max-height: calc(100vh - 265px);
-  min-height: 420px;
+  max-height: calc(100vh - 126px);
+  min-height: 160px;
+  resize: both;
 }
 
 table {
-  width: max-content;
   min-width: 100%;
   border-collapse: separate;
   border-spacing: 0;
@@ -299,6 +322,8 @@ td {
   border-bottom: 1px solid var(--line);
   background: #fff;
   vertical-align: top;
+  position: relative;
+  overflow: hidden;
 }
 
 th {
@@ -317,9 +342,9 @@ th.numeric {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 5px 30px 5px 8px;
+  gap: 4px;
+  min-height: 26px;
+  padding: 2px 26px 2px 6px;
 }
 
 .col-title {
@@ -337,7 +362,7 @@ th.numeric {
   flex: 0 0 auto;
   width: 18px;
   height: 18px;
-  border-radius: 50%;
+  border-radius: 0;
   background: #d5ebff;
   color: #115d91;
   font-size: 10px;
@@ -348,7 +373,7 @@ th.numeric {
   position: sticky;
   left: 0;
   z-index: 1;
-  width: 64px;
+  width: 44px;
   background: #f8fafb;
   color: var(--muted);
   text-align: left;
@@ -361,8 +386,10 @@ th.row-number {
 
 td textarea {
   display: block;
-  min-height: 100%;
-  height: 100%;
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  height: auto;
   width: 100%;
   border: 0;
   border-radius: 0;
@@ -370,7 +397,11 @@ td textarea {
   overflow: hidden;
   box-shadow: none;
   background: transparent;
-  line-height: 1.35;
+  line-height: 18px;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  word-break: normal;
+  padding: 4px 8px;
 }
 
 .cell-error {
@@ -380,10 +411,10 @@ td textarea {
 .small-button {
   display: inline-grid;
   place-items: center;
-  min-width: 26px;
-  min-height: 26px;
+  min-width: 18px;
+  min-height: 18px;
   padding: 0;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .sort-button.active {
@@ -395,24 +426,20 @@ td textarea {
   color: var(--danger);
 }
 
-.file-input {
-  display: none;
-}
-
 #file-input {
   display: none;
 }
 
 .corner-tools {
   justify-content: center;
-  gap: 4px;
-  padding: 4px;
+  gap: 1px;
+  padding: 1px;
 }
 
 .cell-actions {
-  gap: 3px;
+  gap: 2px;
   flex-wrap: nowrap;
-  opacity: 0.34;
+  opacity: 0.28;
   transition: opacity 120ms ease;
 }
 
@@ -424,50 +451,67 @@ th:hover .cell-actions,
 
 .th-content .cell-actions {
   position: absolute;
-  right: 6px;
-  top: 4px;
+  right: 8px;
+  top: 5px;
 }
 
 .row-actions {
   position: relative;
-  justify-content: space-between;
-  gap: 4px;
+  justify-content: center;
+  gap: 1px;
   height: 100%;
-  padding: 4px;
+  padding: 1px;
 }
 
-.row-resizer,
+.row-label {
+  flex: 1;
+  min-width: 0;
+  padding-left: 2px;
+  font-weight: 750;
+}
+
+.row-cell-actions {
+  position: absolute;
+  right: 1px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
 .col-resizer {
   position: absolute;
   z-index: 4;
   background: transparent;
 }
 
-.row-resizer {
-  left: 0;
-  right: 0;
-  bottom: -3px;
-  height: 7px;
-  cursor: row-resize;
-}
-
 .col-resizer {
   top: 0;
-  right: -3px;
-  width: 7px;
+  right: -5px;
+  width: 12px;
   height: 100%;
   cursor: col-resize;
 }
 
-.col-resizer:hover,
-.row-resizer:hover {
+.col-resizer:hover {
   background: rgba(20, 125, 115, 0.2);
 }
 
 .icon-button {
-  border-radius: 5px;
-  font-size: 13px;
+  border-radius: 0;
+  font-size: 11px;
   line-height: 1;
+}
+
+.icon-button svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  pointer-events: none;
+}
+
+.small-button.icon-button svg {
+  width: 13px;
+  height: 13px;
 }
 
 .sort-button {
@@ -496,7 +540,7 @@ th:hover .cell-actions,
 
 @media (max-width: 560px) {
   .app-shell {
-    padding: 12px;
+    padding: 4px;
   }
 
   .topbar {
