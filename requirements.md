@@ -38,3 +38,21 @@ The "Disable filters" actually deletes the filter. The button is anyway not need
 ---
 
 The height of the rows should be as high as needed to display the full content. When changing the width of a column or the content of a cell this needs to be reaevaluated
+
+---
+
+Double click on the column width setting thingy sets the width as wide as needed to display it on one row. Also there is a display error bug.
+
+Also the min-height is too high. Everything is too spacious.
+
+Also all buttons should have symbols and not words. For add, download, copy, import, choose file.
+
+Also remove rounded borders and these margins. It should be a compact editor and viewer
+
+---
+
+I don't like that Auto is not on the same line as the three symbols. Also use better symbols from maybe material design or something
+
+---
+
+Besides the download and copy button also make a copy as markdown table button. And also make a download as xlsx file
