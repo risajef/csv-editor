@@ -384,6 +384,29 @@ th.row-number {
   background: #e7ecef;
 }
 
+.draggable-column,
+.draggable-row {
+  cursor: grab;
+}
+
+.draggable-column.dragging,
+.draggable-row.dragging {
+  opacity: 0.5;
+}
+
+.draggable-column.drag-over {
+  box-shadow: inset 3px 0 var(--accent);
+}
+
+.draggable-row.drag-over {
+  box-shadow: inset 0 3px var(--accent);
+}
+
+.draggable-column:active,
+.draggable-row:active {
+  cursor: grabbing;
+}
+
 td textarea {
   display: block;
   position: absolute;

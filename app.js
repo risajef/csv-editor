@@ -8,6 +8,7 @@ const state = {
   colWidths: [],
   rowHeights: [],
   heightUpdateQueued: false,
+  drag: null,
 };
 
 const els = {
@@ -339,6 +340,91 @@ function viewDataRowsOnly() {
   return viewRows().map((item) => item.row);
 }
 
+function isInteractiveDragTarget(target) {
+  return target instanceof Element && target.closest("button, textarea, input, select, .col-resizer");
+}
+
+function clearDragState() {
+  state.drag = null;
+  els.tableWrap.querySelectorAll(".dragging, .drag-over").forEach((element) => {
+    element.classList.remove("dragging", "drag-over");
+  });
+}
+
+function startDrag(event, type, index) {
+  if (isInteractiveDragTarget(event.target)) {
+    event.preventDefault();
+    return;
+  }
+
+  state.drag = { type, index };
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", `${type}:${index}`);
+  }
+  event.currentTarget.classList.add("dragging");
+}
+
+function allowDrop(event, type, index) {
+  if (!state.drag || state.drag.type !== type || state.drag.index === index) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+  event.currentTarget.classList.add("drag-over");
+}
+
+function dropItem(event, type, index) {
+  event.preventDefault();
+  if (!state.drag || state.drag.type !== type || state.drag.index === index) {
+    clearDragState();
+    return;
+  }
+
+  const source = state.drag.index;
+  clearDragState();
+  if (type === "row") reorderRow(source, index);
+  if (type === "column") reorderColumn(source, index);
+}
+
+function reorderRow(fromIndex, targetIndex) {
+  if (fromIndex === 0 || targetIndex === 0 || fromIndex === targetIndex) return;
+
+  const [row] = state.rows.splice(fromIndex, 1);
+  const [height] = state.rowHeights.splice(fromIndex, 1);
+  const insertionIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex;
+  state.rows.splice(insertionIndex, 0, row);
+  state.rowHeights.splice(insertionIndex, 0, height);
+  state.sort = null;
+  state.rawText = toCsv(state.rows, state.separator);
+  render();
+}
+
+function reorderColumn(fromIndex, targetIndex) {
+  if (fromIndex === targetIndex) return;
+
+  const order = Array.from({ length: maxColumns() }, (_, index) => index);
+  const [moved] = order.splice(fromIndex, 1);
+  const insertionIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex;
+  order.splice(insertionIndex, 0, moved);
+
+  state.rows = state.rows.map((row) => order
+    .filter((index) => index < row.length)
+    .map((index) => row[index]));
+  state.colWidths = order.map((index) => state.colWidths[index] || 160);
+
+  const columnMap = new Map(order.map((oldIndex, newIndex) => [oldIndex, newIndex]));
+  state.filters = state.filters.map((filter) => ({
+    ...filter,
+    column: columnMap.get(filter.column) ?? filter.column,
+  }));
+  if (state.sort) {
+    state.sort = { ...state.sort, column: columnMap.get(state.sort.column) ?? state.sort.column };
+  }
+
+  recalculateAllRowHeights();
+  state.rawText = toCsv(state.rows, state.separator);
+  render();
+}
+
 function addFilter() {
   if (!state.rows.length) {
     state.rows = [["Column 1"], [""]];
@@ -590,6 +676,14 @@ function renderTable() {
 
   for (let col = 0; col < maxColumns(); col += 1) {
     const th = document.createElement("th");
+    th.draggable = true;
+    th.className = "draggable-column";
+    th.title = "Drag to move column";
+    th.addEventListener("dragstart", (event) => startDrag(event, "column", col));
+    th.addEventListener("dragover", (event) => allowDrop(event, "column", col));
+    th.addEventListener("dragleave", (event) => event.currentTarget.classList.remove("drag-over"));
+    th.addEventListener("drop", (event) => dropItem(event, "column", col));
+    th.addEventListener("dragend", clearDragState);
     if (types[col]) th.classList.add("numeric");
     const content = document.createElement("div");
     content.className = "th-content";
@@ -663,6 +757,16 @@ function renderTable() {
     tr.style.height = `${rowHeight(item.index)}px`;
     const rowHead = document.createElement("th");
     rowHead.className = "row-number";
+    rowHead.draggable = item.index > 0;
+    if (item.index > 0) {
+      rowHead.classList.add("draggable-row");
+      rowHead.title = "Drag to move row";
+      rowHead.addEventListener("dragstart", (event) => startDrag(event, "row", item.index));
+      rowHead.addEventListener("dragover", (event) => allowDrop(event, "row", item.index));
+      rowHead.addEventListener("dragleave", (event) => event.currentTarget.classList.remove("drag-over"));
+      rowHead.addEventListener("drop", (event) => dropItem(event, "row", item.index));
+      rowHead.addEventListener("dragend", clearDragState);
+    }
     const rowActions = document.createElement("div");
     rowActions.className = "row-actions";
     const rowLabel = document.createElement("span");
