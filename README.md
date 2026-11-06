@@ -78,3 +78,14 @@ It starts a temporary loopback server, launches headless Chromium and cleans up 
 - `app.js`: browser event lifecycle, transactional edits/recovery, worker coordination, pagination and DOM layout. It validates document limits and records history around document commands.
 
 These are ordinary dependency-ordered browser scripts with one namespace per service, so the app remains buildless. Pure services can run under Node without document/window/clipboard/filesystem shims. No generated bundle or external runtime package is shipped.
+
+Independent workbook checks use Python's standard ZIP/XML readers, with optional `openpyxl==3.1.5` readback:
+
+```sh
+node tests/workbook-fixture.cjs /tmp/csv-editor.xlsx
+python3 tests/check_workbook.py /tmp/csv-editor.xlsx
+# In a Python environment with openpyxl installed:
+python3 tests/check_workbook.py /tmp/csv-editor.xlsx --reader
+```
+
+The subrepo CI runs syntax checks, Node regressions and independent workbook readback. The real-browser smoke suite remains an explicit local check; no npm packages are needed for the default checks. Browser QA has been run in Chromium, including touch emulation. Excel, LibreOffice and assistive-technology testing have not been performed. Raw OpenXML escape sequences are checked at the XML layer; openpyxl does not decode those sequences in inline string cells, so that reader check covers ordinary cell text, whitespace, Unicode and string typing.

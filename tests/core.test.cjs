@@ -34,3 +34,16 @@ test('history truncates older snapshots within its configured bounds', () => {
   assert.equal(run('history.past.length'), 1);
   assert.equal(run('history.future.length'), 0);
 });
+
+test('CSV serialization round trips a corpus of empty and special-character cells', () => {
+  const run = core();
+  const values = ['', 'plain', ' leading ', 'a,b', 'a;b', 'a|b', 'a\tb', 'a\nb', 'a\rb', 'a\r\nb', 'a"b', '😀', '&<>'];
+  for (const separator of [',', ';', '\t', '|']) {
+    const rows = [['header']];
+    for (let index = 0; index < 80; index++) {
+      rows.push(Array.from({length:1+index%4}, (_,column) => values[(index*7+column*3)%values.length]));
+    }
+    const actual = run(`Csv.parseCsv(Csv.toCsv(${JSON.stringify(rows)},${JSON.stringify(separator)}),${JSON.stringify(separator)})`);
+    assert.deepEqual(JSON.parse(JSON.stringify(actual)), rows);
+  }
+});

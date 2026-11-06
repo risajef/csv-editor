@@ -21,7 +21,7 @@ Run regression checks with `node --test --test-isolation=none tests/*.test.cjs`.
 - [x] Literal Markdown cell export.
 - [x] Accessible cells, filters, resizing, and movement.
 - [x] Standalone theme and usage documentation.
-- [ ] Architecture separation and final quality gate.
+- [x] Architecture separation and final quality gate.
 
 ## Completed fixes
 
@@ -104,3 +104,18 @@ Final edge-case checks found that a restricted browser origin can throw when the
 ### 20 — Preserve focus while changing filter controls
 
 Filter selection/toggle changes now use the same focus-preserving render boundary as document refreshes. Deleting a focused filter returns keyboard focus to Add filter; view changes also schedule recovery saves. The browser regression now exercises choosing a column, typing equality text, disabling the filter and deleting it, checking both exported matches and focused controls. Validation: 24 Node tests and the expanded Chromium smoke suite passed.
+
+### 21 — Add reproducible quality gates and complete verification
+
+Added subrepo CI for syntax, Node regressions (Node 24/26 matrix), and independent workbook ZIP/XML/openpyxl checks. Added a deterministic workbook fixture plus a standalone Python validator. Expanded the optional browser suite with native file upload, UI filtering/sorting, page-independent CSV download, real 3,000-row XLSX download, recovery after reload, and touch resizing at a 390-pixel viewport. A CSV corpus exercises empty and special-character cells across all four delimiters.
+
+Final local results:
+
+- 25 Node regressions passed on Node v26.5.0, including pure-service tests without browser shims.
+- All runtime/test JavaScript syntax checks and `git diff --check` passed.
+- Chromium 131.0.6778.204 browser suite passed, including focus, keyboard/touch interaction, real downloads, tab recovery and actual regex-worker termination. Temporary server/browser/download artifacts are cleaned up by the suite.
+- A 3,003-record workbook passed Python ZIP CRC/XML checks and independent openpyxl 3.1.5 readback of ordinary text, whitespace, Unicode, leading zeros and explicit string typing.
+- Raw OpenXML escape sequences were verified at the XML layer. openpyxl does not decode those sequences in inline strings; no Excel/LibreOffice or assistive-technology sign-off is claimed.
+- The CI workflow is configured but has not run on GitHub; the Node 24 matrix entry has not been exercised locally.
+
+All review checklist items are addressed. Twenty implementation/follow-up commits precede this quality-gate commit; each contains its corresponding progress entry. No changes were pushed or deployed. The parent repository index still pins csv-editor to `ca95db69b6386735a6f349321c95f1f3b615a5d3`; it has no staged csv-editor pointer update. Its working tree naturally reports a changed submodule because the subrepo now has new commits. Parent pages and staged application assets were not rebuilt or edited.
