@@ -439,7 +439,7 @@ function deleteFilter(id) {
   renderStats();
 }
 
-function operatorOptions(numeric) {
+function operatorOptions(numeric, activeOperator) {
   const base = [
     ["equals", "equals"],
     ["not-equals", "not equals"],
@@ -453,7 +453,11 @@ function operatorOptions(numeric) {
     ["lt", "<"],
     ["lte", "<="],
   ];
-  return numeric ? base.concat(numberOps) : base;
+  // Retain an existing comparison after edits change the inferred column type.
+  // Its per-cell semantics remain explicit instead of showing an unrelated option.
+  const retained = numberOps.filter(([value]) => value === activeOperator)
+    .map(([value, label]) => [value, `${label} (numeric values only)`]);
+  return numeric ? base.concat(numberOps) : base.concat(retained);
 }
 
 function renderFilters() {
@@ -498,7 +502,7 @@ function renderFilters() {
     operatorLabel.title = "Match";
     operatorLabel.textContent = "Match";
     const operator = document.createElement("select");
-    for (const [value, label] of operatorOptions(isNumericColumn(filter.column))) {
+    for (const [value, label] of operatorOptions(isNumericColumn(filter.column), filter.operator)) {
       const option = document.createElement("option");
       option.value = value;
       option.textContent = label;

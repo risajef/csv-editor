@@ -14,7 +14,7 @@ Run regression checks with `node --test --test-isolation=none tests/*.test.cjs`.
 - [x] 6. Diagnose CSV syntax and preserve empty records.
 - [x] 7. Isolate regex evaluation with cancellation and errors.
 - [x] 8. Produce valid worksheet XML or report unsupported content.
-- [ ] Numeric missing-value and operator semantics.
+- [x] Numeric missing-value and operator semantics.
 - [ ] Undo, recovery, and explicit document state boundaries.
 - [ ] Import sequencing and operation error reporting.
 - [ ] Explicit spreadsheet-safe CSV export.
@@ -60,3 +60,7 @@ XLSX export rejects XML-illegal characters, unpaired surrogates, overlong cells 
 ### 9 — Distinguish missing numeric values from zero
 
 Numeric comparisons now skip blank, whitespace-only and nonnumeric operands. Blank thresholds do not become zero. Numeric sorting puts missing values last in both directions. Validation: 11 tests passed, including zero-versus-missing comparisons and ascending/descending blank placement.
+
+### 10 — Keep active operators visible after data-type changes
+
+A numeric comparison remains the selected option when edits make its column mixed, with a “numeric values only” label explaining that blank/nonnumeric cells do not match. The dropdown no longer silently displays equality while running another comparison. Validation: 12 tests passed.

@@ -172,3 +172,12 @@ test('numeric comparisons skip missing operands and sort blanks last in either d
   app.run(`state.sort.direction='desc'`);
   assert.deepEqual(app.json('viewDataRowsOnly()'), [['n'],['2'],['1'],['']]);
 });
+
+test('active numeric operator remains represented after a column becomes mixed', () => {
+  const app = harness();
+  app.run(`state.rows=[['n'],['1'],['text']];state.filters=[{id:'f',enabled:true,column:0,operator:'gt',value:'0'}];renderFilters()`);
+  const options = app.json('operatorOptions(isNumericColumn(0),state.filters[0].operator)');
+  assert.ok(options.some(([value,label]) => value === 'gt' && /numeric values only/.test(label)));
+  assert.equal(app.run(`els.filtersList.children[0].children[2].children[0].children.find(option=>option.selected).value`), 'gt');
+  assert.deepEqual(app.json('viewDataRowsOnly()'), [['n'],['1']]);
+});
