@@ -1,3 +1,4 @@
+const LIMITS = Object.freeze({ text: 5 * 1024 * 1024, rows: 50000, columns: 500, cells: 1000000 });
 const state = {
   rawText: "",
   separatorChoice: "auto",
@@ -9,9 +10,15 @@ const state = {
   rowHeights: [],
   heightUpdateQueued: false,
   drag: null,
+  page: 0,
+  visibleCount: 0,
 };
 
 const els = {
+  previousPage: document.querySelector("#previous-page"),
+  nextPage: document.querySelector("#next-page"),
+  pageInfo: document.querySelector("#page-info"),
+  operation: document.querySelector("#operation-status"),
   fileInput: document.querySelector("#file-input"),
   chooseFile: document.querySelector("#choose-file"),
   dropZone: document.querySelector("#drop-zone"),
@@ -160,16 +167,41 @@ function toCsv(rows, sep) {
   return rows.map((row) => row.map((cell) => csvEscape(cell, sep)).join(sep)).join("\n");
 }
 
+function showStatus(message, error = false) {
+  els.operation.textContent = message;
+  els.operation.className = `status-card ${error ? "warn" : ""}`;
+}
+
+function assertDocumentSize(rows) {
+  const width = rows.reduce((max, row) => Math.max(max, row.length), 0);
+  if (rows.length > LIMITS.rows || width > LIMITS.columns || rows.length * width > LIMITS.cells) {
+    throw new Error("Document limit: 50,000 rows, 500 columns, and 1,000,000 cells.");
+  }
+}
+
 function loadText(text) {
-  state.rawText = text;
-  state.separator = activeSeparator();
-  state.rows = parseCsv(text, state.separator);
-  state.filters = [];
-  state.sort = null;
-  resetTableSizes();
-  els.csvInput.value = text;
-  if (state.rows.length) els.importPanel.open = false;
-  render();
+  try {
+    if (text.length > LIMITS.text) throw new Error("Import limit: 5 MiB of text.");
+    const separator = state.separatorChoice === "auto" ? detectSeparator(text)
+      : state.separatorChoice === "tab" ? "\t" : state.separatorChoice;
+    const rows = parseCsv(text, separator);
+    assertDocumentSize(rows);
+    state.rawText = text;
+    state.separator = separator;
+    state.rows = rows;
+    state.filters = [];
+    state.sort = null;
+    state.page = 0;
+    resetTableSizes();
+    els.csvInput.value = text;
+    if (state.rows.length) els.importPanel.open = false;
+    showStatus("");
+    render();
+    return true;
+  } catch (error) {
+    showStatus(error.message, true);
+    return false;
+  }
 }
 
 function resetTableSizes() {
@@ -217,12 +249,17 @@ function autoSizeColumn(index) {
   renderStats();
 }
 
-function estimateRowHeight(row, rowIndex) {
+function layoutMetrics() {
+  const columns = maxColumns();
+  const base = baseTableWidth(columns);
+  return { columns, extraWidth: Math.max(0, (els.tableWrap.clientWidth || 0) - base) / Math.max(1, columns) };
+}
+
+function estimateRowHeight(row, rowIndex, layout = layoutMetrics()) {
   if (rowIndex === 0) return 28;
 
   let lines = 1;
-  const columns = maxColumns();
-  const extraWidth = Math.max(0, tableWidth() - baseTableWidth()) / Math.max(1, columns);
+  const { columns, extraWidth } = layout;
 
   for (let col = 0; col < columns; col += 1) {
     lines = Math.max(lines, estimateTextLines(row[col], colWidth(col) + extraWidth));
@@ -232,12 +269,13 @@ function estimateRowHeight(row, rowIndex) {
 }
 
 function recalculateAllRowHeights() {
-  state.rowHeights = state.rows.map((row, index) => estimateRowHeight(row, index));
+  const layout = layoutMetrics();
+  state.rowHeights = state.rows.map((row, index) => estimateRowHeight(row, index, layout));
 }
 
-function recalculateRowHeight(index) {
+function recalculateRowHeight(index, layout = layoutMetrics()) {
   if (!state.rows[index]) return;
-  state.rowHeights[index] = estimateRowHeight(state.rows[index], index);
+  state.rowHeights[index] = estimateRowHeight(state.rows[index], index, layout);
 }
 
 function headerName(index) {
@@ -250,8 +288,8 @@ function isNumericColumn(index) {
   return values.length > 0 && values.every((value) => Number.isFinite(Number(value)));
 }
 
-function columnTypes() {
-  return Array.from({ length: maxColumns() }, (_, index) => isNumericColumn(index));
+function columnTypes(columns = maxColumns()) {
+  return Array.from({ length: columns }, (_, index) => isNumericColumn(index));
 }
 
 function validationMessage() {
@@ -532,7 +570,7 @@ function renderValidation() {
 }
 
 function renderStats() {
-  const visible = Math.max(0, viewRows().length - (state.rows.length ? 1 : 0));
+  const visible = state.visibleCount;
   const total = Math.max(0, state.rows.length - (state.rows.length ? 1 : 0));
   const columns = maxColumns();
   const sepLabel = state.separator === "\t" ? "tab" : state.separator;
@@ -565,12 +603,12 @@ function resizeColumn(index, event) {
   document.addEventListener("mouseup", stop);
 }
 
-function tableWidth() {
-  return Math.max(baseTableWidth(), els.tableWrap.clientWidth || 0);
+function tableWidth(columns = maxColumns()) {
+  return Math.max(baseTableWidth(columns), els.tableWrap.clientWidth || 0);
 }
 
-function baseTableWidth() {
-  return 44 + Array.from({ length: maxColumns() }, (_, index) => colWidth(index)).reduce((sum, width) => sum + width, 0);
+function baseTableWidth(columns = maxColumns()) {
+  return 44 + Array.from({ length: columns }, (_, index) => colWidth(index)).reduce((sum, width) => sum + width, 0);
 }
 
 function applyRowHeights() {
@@ -590,15 +628,19 @@ function queueRenderedRowHeightUpdate() {
 }
 
 function recalculateRenderedRowHeights() {
+  const layout = layoutMetrics();
   els.tableWrap.querySelectorAll("tr[data-row-height]").forEach((tr) => {
     const index = Number(tr.dataset.rowHeight);
-    recalculateRowHeight(index);
+    recalculateRowHeight(index, layout);
   });
 }
 
 function renderTable() {
   els.tableWrap.innerHTML = "";
+  state.visibleCount = 0;
   if (!state.rows.length) {
+    els.pageInfo.textContent = "No data rows";
+    els.previousPage.disabled = els.nextPage.disabled = true;
     const note = document.createElement("div");
     note.className = "empty-note";
     note.style.padding = "18px";
@@ -607,15 +649,24 @@ function renderTable() {
     return;
   }
 
-  const types = columnTypes();
-  const rows = viewRows();
+  const columns = maxColumns();
+  const types = columnTypes(columns);
+  const allRows = viewRows();
+  state.visibleCount = Math.max(0, allRows.length - 1);
+  const pageSize = Math.max(1, Math.min(100, Math.floor(2000 / Math.max(1, columns))));
+  const pages = Math.max(1, Math.ceil(state.visibleCount / pageSize));
+  state.page = Math.max(0, Math.min(state.page, pages - 1));
+  const rows = allRows.slice(0, 1).concat(allRows.slice(1 + state.page * pageSize, 1 + (state.page + 1) * pageSize));
+  els.pageInfo.textContent = `Page ${state.page + 1} of ${pages}. Exports include all matching rows.`;
+  els.previousPage.disabled = state.page === 0;
+  els.nextPage.disabled = state.page >= pages - 1;
   const table = document.createElement("table");
-  table.style.width = `${tableWidth()}px`;
+  table.style.width = `${tableWidth(columns)}px`;
   const colgroup = document.createElement("colgroup");
   const rowCol = document.createElement("col");
   rowCol.style.width = "44px";
   colgroup.append(rowCol);
-  for (let col = 0; col < maxColumns(); col += 1) {
+  for (let col = 0; col < columns; col += 1) {
     const colEl = document.createElement("col");
     colEl.dataset.colWidth = String(col);
     colEl.style.width = `${colWidth(col)}px`;
@@ -647,7 +698,7 @@ function renderTable() {
   corner.append(cornerTools);
   headRow.append(corner);
 
-  for (let col = 0; col < maxColumns(); col += 1) {
+  for (let col = 0; col < columns; col += 1) {
     const th = document.createElement("th");
     th.draggable = true;
     th.className = "draggable-column";
@@ -764,15 +815,15 @@ function renderTable() {
     rowHead.append(rowActions);
     tr.append(rowHead);
 
-    for (let col = 0; col < maxColumns(); col += 1) {
+    for (let col = 0; col < columns; col += 1) {
       const td = document.createElement("td");
-      if (item.row.length !== maxColumns()) td.className = "cell-error";
+      if (item.row.length !== columns) td.className = "cell-error";
       const input = document.createElement("textarea");
       input.value = item.row[col] ?? "";
       input.addEventListener("input", () => {
         while (state.rows[item.index].length <= col) state.rows[item.index].push("");
         state.rows[item.index][col] = input.value;
-        state.rawText = toCsv(state.rows, state.separator);
+        state.rawText = null; // Serialize on demand, rather than on every keystroke.
         recalculateRowHeight(item.index);
         tr.style.height = `${rowHeight(item.index)}px`;
       });
@@ -1078,6 +1129,7 @@ function downloadXlsx() {
 }
 
 function readFile(file) {
+  if (file.size > LIMITS.text) { showStatus("Import limit: 5 MiB file.", true); return; }
   const reader = new FileReader();
   reader.addEventListener("load", () => loadText(String(reader.result ?? "")));
   reader.readAsText(file);
@@ -1094,6 +1146,7 @@ els.fileInput.addEventListener("change", () => {
   if (file) readFile(file);
 });
 els.separator.addEventListener("change", () => {
+  if (state.rawText === null) state.rawText = toCsv(state.rows, state.separator);
   state.separatorChoice = els.separator.value;
   state.separator = activeSeparator();
   state.rows = parseCsv(state.rawText, state.separator);
@@ -1118,6 +1171,8 @@ els.downloadView.addEventListener("click", downloadView);
 els.copyView.addEventListener("click", copyView);
 els.copyMarkdown.addEventListener("click", copyMarkdown);
 els.downloadXlsx.addEventListener("click", downloadXlsx);
+els.previousPage.addEventListener("click", () => { state.page -= 1; renderTable(); renderStats(); });
+els.nextPage.addEventListener("click", () => { state.page += 1; renderTable(); renderStats(); });
 window.addEventListener("resize", queueRenderedRowHeightUpdate);
 
 render();

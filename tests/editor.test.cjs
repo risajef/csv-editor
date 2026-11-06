@@ -59,3 +59,24 @@ test('large exports avoid argument limits and preserve valid ZIP entries', () =>
   assert.equal(app.run('maxColumns()'), 2);
   assert.ok(app.run('currentViewMarkdown().endsWith("| x | y |")'));
 });
+
+test('table scans are linear and pagination bounds rendered cells, not export', () => {
+  const app = harness();
+  const visits = size => app.run(`state.rows=Array.from({length:${size}},()=>Array(5).fill('x')); state.filters=[];state.sort=null; var originalMax=maxColumns;var scans=0;maxColumns=()=>{scans+=state.rows.length;return originalMax();};renderTable();maxColumns=originalMax;scans`);
+  const small = visits(100);
+  const large = visits(200);
+  assert.ok(large <= small * 2.1, `${small} → ${large}`);
+  assert.equal(app.run('els.tableWrap.children[0].children[2].children.length'), 101);
+  assert.equal(app.run('viewDataRowsOnly().length'), 200);
+  app.run('state.page=1;renderTable()');
+  assert.equal(app.run('els.tableWrap.children[0].children[2].children.length'), 100);
+});
+
+test('oversized imports preserve the current document and show a useful error', () => {
+  const app = harness(); app.run(`loadText('id,value')`);
+  assert.equal(app.run(`loadText('x'.repeat(LIMITS.text+1))`), false);
+  assert.match(app.run('els.operation.textContent'), /5 MiB/);
+  assert.deepEqual(app.json('state.rows'), [['id','value']]);
+  assert.equal(app.run(`loadText(Array(502).fill('x').join(','))`), false);
+  assert.match(app.run('els.operation.textContent'), /500 columns/);
+});

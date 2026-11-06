@@ -67,6 +67,8 @@
         <div id="table-stats" class="status-card">0 rows, 0 columns</div>
       </section>
 
+      <div id="operation-status" class="status-card" role="status" aria-live="polite"></div>
+
       <section class="workspace">
         <aside class="filters-panel" aria-label="Filters">
           <div class="panel-heading">
@@ -79,6 +81,11 @@
         </aside>
 
         <section class="table-panel" aria-label="CSV table">
+          <nav class="panel-heading" aria-label="Table pages">
+            <button id="previous-page" type="button">Previous</button>
+            <span id="page-info" aria-live="polite"></span>
+            <button id="next-page" type="button">Next</button>
+          </nav>
           <div id="table-wrap" class="table-wrap"></div>
         </section>
       </section>
