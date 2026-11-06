@@ -50,10 +50,17 @@ globalThis.Csv = (() => {
   }
   function csvEscape(value, separator) {
     const text = String(value ?? '');
-    return /["\r\n]/.test(text) || text.includes(separator) ? `"${text.replaceAll('"', '""')}"` : text;
+    return /["\t\r\n]/.test(text) || text.includes(separator) ? `"${text.replaceAll('"', '""')}"` : text;
   }
   function toCsv(rows, separator) {
     return rows.map(row => row.length === 1 && row[0] === '' ? '""' : row.map(cell => csvEscape(cell, separator)).join(separator)).join('\n');
   }
-  return Object.freeze({ parseCsv, detectSeparator, csvEscape, toCsv, CsvSyntaxError });
+  function toSpreadsheetCsv(rows, separator) {
+    const values = rows.map(row => row.map(value => {
+      const text = String(value ?? '');
+      return /^(?:[\t\r\n]|\s*[=+\-@＝＋－＠])/u.test(text) ? `\t${text}` : text;
+    }));
+    return toCsv(values, separator);
+  }
+  return Object.freeze({ parseCsv, detectSeparator, csvEscape, toCsv, toSpreadsheetCsv, CsvSyntaxError });
 })();

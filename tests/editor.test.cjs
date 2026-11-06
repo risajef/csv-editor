@@ -254,3 +254,16 @@ test('clipboard rejection and failed fallback report errors; late success cannot
   pending.run(`showStatus('Newer error',true)`);finish();await promise;
   assert.equal(pending.run('els.operation.textContent'), 'Newer error');
 });
+
+test('spreadsheet-text CSV is opt-in and never changes the document', () => {
+  const app = harness();
+  app.run(`state.rows=[['v'],['=1+1'],[' @SUM(A1)'],['ordinary'],['-12'],['\tvalue']]`);
+  const original = app.json('state.rows');
+  assert.deepEqual(app.json(`parseCsv(currentViewCsv(),',')`), original);
+  app.run('els.spreadsheetText.checked=true');
+  assert.deepEqual(app.json(`parseCsv(currentViewCsv(),',')`), [['v'],['\t=1+1'],['\t @SUM(A1)'],['ordinary'],['\t-12'],['\t\tvalue']]);
+  assert.match(app.run('currentViewCsv()'), /"\t=1\+1"/);
+  assert.deepEqual(app.json('state.rows'), original);
+  app.run('els.spreadsheetText.checked=false');
+  assert.deepEqual(app.json(`parseCsv(currentViewCsv(),',')`), original);
+});

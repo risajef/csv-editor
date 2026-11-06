@@ -17,7 +17,7 @@ Run regression checks with `node --test --test-isolation=none tests/*.test.cjs`.
 - [x] Numeric missing-value and operator semantics.
 - [x] Undo, recovery, and explicit document state boundaries.
 - [x] Import sequencing and operation error reporting.
-- [ ] Explicit spreadsheet-safe CSV export.
+- [x] Explicit spreadsheet-safe CSV export.
 - [ ] Literal Markdown cell export.
 - [ ] Accessible cells, filters, resizing, and movement.
 - [ ] Standalone theme and usage documentation.
@@ -72,3 +72,7 @@ Added a shared document-edit boundary with size validation, rollback, bounded un
 ### 12 — Sequence imports and surface operation failures
 
 A new import, paste, undo or document edit cancels pending file reads; obsolete callbacks cannot overwrite newer work. File read/abort failures preserve the document and report an actionable message. Clipboard rejection and fallback failure are caught, temporary controls are cleaned up, and late operation completions cannot hide newer status messages. Downloads share cleanup and delayed URL revocation, show failures, and clear the unload guard only when the complete document is included. Validation: 16 tests passed, including reversed read completion, paste superseding a file, read errors, clipboard denial, fallback failure and stale completion status.
+
+### 13 — Make spreadsheet-oriented CSV export explicit
+
+Added an opt-in “Spreadsheet text CSV” policy for CSV copy/download. Formula-like cells receive a quoted tab prefix, including whitespace-prefixed and full-width formula starters. Ordinary CSV remains lossless, editor data is untouched, and transformed downloads do not clear the unsaved-document guard. XLSX remains explicit string-cell export. This policy changes exported values and is not a universal guarantee across spreadsheet applications or save/reopen cycles; documentation will state that boundary. Validation: 17 tests passed.

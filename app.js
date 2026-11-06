@@ -27,6 +27,7 @@ let operationRevision = 0;
 const DRAFT_KEY = "ideo-csv-draft-v1";
 const DOCUMENT_FIELDS = ["rows", "filters", "sort", "colWidths", "separator", "separatorChoice", "rawText", "sourceText", "edited", "dirty", "page", "textLength"];
 const els = {
+  spreadsheetText: document.querySelector("#spreadsheet-text"),
   undo: document.querySelector("#undo"),
   redo: document.querySelector("#redo"),
   restoreDraft: document.querySelector("#restore-draft"),
@@ -1052,7 +1053,7 @@ function transpose() {
 }
 
 function currentViewCsv() {
-  return toCsv(viewDataRowsOnly(), state.separator);
+  return (els.spreadsheetText.checked ? Csv.toSpreadsheetCsv : toCsv)(viewDataRowsOnly(), state.separator);
 }
 
 function markdownCell(value) {
@@ -1076,8 +1077,9 @@ function currentViewMarkdown() {
 function downloadView() {
   return runOperation("CSV download prepared.", () => {
     const rows = viewDataRowsOnly();
-    downloadBlob(toCsv(rows, state.separator), "text/csv;charset=utf-8", "ideo-view.csv");
-    if (rows.length === state.rows.length) { state.dirty = false; scheduleDraft(); }
+    const spreadsheet = els.spreadsheetText.checked;
+    downloadBlob((spreadsheet ? Csv.toSpreadsheetCsv : toCsv)(rows, state.separator), "text/csv;charset=utf-8", spreadsheet ? "ideo-view-spreadsheet-text.csv" : "ideo-view.csv");
+    if (!spreadsheet && rows.length === state.rows.length) { state.dirty = false; scheduleDraft(); }
   });
 }
 
