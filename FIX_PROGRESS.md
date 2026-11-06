@@ -96,3 +96,7 @@ Removed the stylesheet request outside the subrepo. Existing local CSS defaults 
 ### 18 — Separate document behavior from browser adapters
 
 Extracted structural commands/reference remapping into `document.js`, projections/type inference/validation into `view.js`, and Markdown/XLSX serializers into `export.js`. `app.js` owns transaction validation/history and browser APIs; pure services receive their data explicitly and do not read controller state or DOM globals. Removed the redundant serialized-text mirror; original import text and current rows have distinct roles. Added DOM-free end-to-end service tests and history-budget checks. Validation: 22 Node tests and the Chromium smoke suite passed after extraction. Final independent workbook and broader interaction checks remain below.
+
+### 19 — Keep recovery failures outside document transactions
+
+Final edge-case checks found that a restricted browser origin can throw when the `sessionStorage` property is accessed, before a save attempt. Draft scheduling now defers that access to the guarded saver, so imports, edits and undo remain usable. Recovery snapshots are fully validated before assigning any document fields, rejecting incompatible/corrupt data without partially replacing current work. Validation: 24 Node tests passed, including a throwing storage getter and malformed recovery snapshots.

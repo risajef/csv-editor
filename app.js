@@ -149,12 +149,36 @@ function saveDraft() {
   } catch { els.draftStatus.textContent = "Recovery draft unavailable; download your work before closing."; }
 }
 
-function scheduleDraft() { if (typeof sessionStorage === "undefined") return; clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 300); }
+function scheduleDraft() {
+  // Accessing the storage getter itself can throw in restricted origins.
+  // Only the guarded save operation should read it.
+  if (!("sessionStorage" in globalThis)) return;
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(saveDraft, 300);
+}
+
+function validateSnapshot(data) {
+  const invalid = () => { throw new Error("Invalid recovery draft; the current document has been kept."); };
+  if (!data || !Array.isArray(data.rows) || data.rows.some(row => !Array.isArray(row) || row.some(cell => typeof cell !== "string"))) invalid();
+  assertDocumentSize(data.rows);
+  const width = DocumentModel.maxColumns(data.rows);
+  const validColumn = column => Number.isInteger(column) && column >= 0 && column < width;
+  const operators = new Set(["equals", "not-equals", "empty", "not-empty", "regex", "gt", "gte", "lt", "lte"]);
+  if (!Array.isArray(data.filters) || data.filters.some(filter => !filter || typeof filter.id !== "string" || !validColumn(filter.column) ||
+    typeof filter.enabled !== "boolean" || typeof filter.value !== "string" || !operators.has(filter.operator))) invalid();
+  if (data.sort !== null && (!data.sort || !validColumn(data.sort.column) || !["asc", "desc"].includes(data.sort.direction))) invalid();
+  if (!Array.isArray(data.colWidths) || data.colWidths.some(width => !Number.isFinite(width) || width < 48 || width > 4000)) invalid();
+  if (typeof data.sourceText !== "string" || data.sourceText.length > LIMITS.text || ![",", ";", "\t", "|"].includes(data.separator) ||
+    !["auto", "tab", ",", ";", "|"].includes(data.separatorChoice) || typeof data.dirty !== "boolean" || typeof data.edited !== "boolean" ||
+    !Number.isInteger(data.page) || data.page < 0) invalid();
+  const length = data.rows.reduce((sum, row) => sum + row.reduce((n, cell) => n + cell.length, 0), 0);
+  if (length > LIMITS.text) invalid();
+}
 
 function restoreSnapshot(snapshot) {
   cancelImport();
   const data = JSON.parse(snapshot);
-  assertDocumentSize(data.rows);
+  validateSnapshot(data);
   for (const key of DOCUMENT_FIELDS) if (Object.hasOwn(data, key)) state[key] = data[key];
   state.textLength = state.rows.reduce((sum, row) => sum + row.reduce((n, cell) => n + cell.length, 0), 0);
   invalidateRegex();
@@ -1107,7 +1131,7 @@ els.discardDraft.addEventListener("click", () => {
   catch (error) { showStatus(error.message, true); }
 });
 try { els.restoreDraft.hidden = els.discardDraft.hidden = !sessionStorage.getItem(DRAFT_KEY); }
-catch { els.restoreDraft.hidden = els.discardDraft.hidden = true; }
+catch { els.restoreDraft.hidden = els.discardDraft.hidden = true; els.draftStatus.textContent = "Recovery draft unavailable; download your work before closing."; }
 window.addEventListener("beforeunload", event => {
   if (state.dirty) { saveDraft(); event.preventDefault(); event.returnValue = ""; }
 });

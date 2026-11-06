@@ -297,3 +297,33 @@ test('generated controls have names and keyboard movement and resize work', () =
   assert.deepEqual(app.json('state.rows'), [['b','a'],['4','3'],['2','1']]);
   assert.ok(app.run('history.past.length') >= 3);
 });
+
+test('blocked storage getters do not interrupt imports, edits or undo', () => {
+  const app = harness({}, context => Object.defineProperty(context,'sessionStorage',{get(){throw new Error('Storage disabled');}}));
+  assert.equal(app.run(String.raw`loadText('a,b\n1,2')`), true);
+  assert.equal(app.run('deleteColumn(0)'), true);
+  app.run('undo();saveDraft();clearTimeout(draftTimer)');
+  assert.deepEqual(app.json('state.rows'), [['a','b'],['1','2']]);
+  assert.match(app.run('els.draftStatus.textContent'), /Recovery draft unavailable/);
+});
+
+test('malformed drafts are rejected before any document field changes', () => {
+  const storage = new Map();
+  const sessionStorage = {getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)};
+  const app = harness({sessionStorage});
+  app.run(String.raw`loadText('a,b\n1,2')`);
+  const before = app.json('state.rows');
+  const draft = app.json('JSON.parse(captureDocument())');
+  for (const invalid of [
+    {...draft, rows:[['replacement']], filters:null},
+    {...draft, rows:[['replacement']], separator:'"'},
+    {...draft, rows:[[123]]},
+    {...draft, sourceText:'x'.repeat(5*1024*1024+1)},
+  ]) {
+    storage.set('ideo-csv-draft-v1',JSON.stringify(invalid));
+    app.run('els.restoreDraft.events.click()');
+    assert.deepEqual(app.json('state.rows'), before);
+    assert.match(app.run('els.operation.textContent'), /Invalid recovery draft/);
+  }
+  app.run('clearTimeout(draftTimer)');
+});

@@ -15,7 +15,7 @@ class Element {
   querySelectorAll() { return []; }
   remove() {} focus() {} select() {} click() {}
 }
-function harness(extra = {}) {
+function harness(extra = {}, setup) {
   const elements = new Map();
   const context = vm.createContext({
     document: {
@@ -26,6 +26,7 @@ function harness(extra = {}) {
     window: { addEventListener() {} }, TextEncoder, Uint8Array, Blob, console,
     setTimeout, clearTimeout, queueMicrotask, requestAnimationFrame: callback => callback(), ...extra,
   });
+  if (setup) setup(context);
   for (const file of ['csv.js', 'document.js', 'view.js', 'export.js', 'app.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context);
   return { context, elements, run: code => vm.runInContext(code, context), json: code => JSON.parse(JSON.stringify(vm.runInContext(code, context))) };
 }
