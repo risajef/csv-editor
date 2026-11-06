@@ -21,6 +21,9 @@ const state = {
 
 const history = new DocumentHistory();
 let draftTimer;
+let importRevision = 0;
+let pendingReader = null;
+let operationRevision = 0;
 const DRAFT_KEY = "ideo-csv-draft-v1";
 const DOCUMENT_FIELDS = ["rows", "filters", "sort", "colWidths", "separator", "separatorChoice", "rawText", "sourceText", "edited", "dirty", "page", "textLength"];
 const els = {
@@ -88,8 +91,42 @@ function activeSeparator() {
 }
 
 function showStatus(message, error = false) {
+  operationRevision += 1;
   els.operation.textContent = message;
   els.operation.className = `status-card ${error ? "warn" : ""}`;
+}
+
+async function runOperation(success, action) {
+  const revision = ++operationRevision;
+  try {
+    await action();
+    if (revision === operationRevision) showStatus(success);
+    return true;
+  } catch (error) {
+    if (revision === operationRevision) showStatus(error.message || String(error), true);
+    return false;
+  }
+}
+
+function cancelImport() {
+  importRevision += 1;
+  if (pendingReader?.readyState === 1) pendingReader.abort();
+  pendingReader = null;
+}
+
+function downloadBlob(content, type, filename) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const link = document.createElement("a");
+  try {
+    link.href = url;
+    link.download = filename;
+    document.body.append(link);
+    link.click();
+  } finally {
+    link.remove();
+    // Keep the URL alive until the browser has consumed the click.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 }
 
 function assertDocumentSize(rows) {
@@ -119,6 +156,7 @@ function saveDraft() {
 function scheduleDraft() { if (typeof sessionStorage === "undefined") return; clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 300); }
 
 function restoreSnapshot(snapshot) {
+  cancelImport();
   const data = JSON.parse(snapshot);
   assertDocumentSize(data.rows);
   for (const key of DOCUMENT_FIELDS) if (Object.hasOwn(data, key)) state[key] = data[key];
@@ -142,6 +180,7 @@ function redo() {
 }
 
 function editDocument(mutate) {
+  cancelImport();
   const before = captureDocument();
   try {
     mutate();
@@ -166,6 +205,7 @@ function editDocument(mutate) {
 }
 
 function loadText(text, choice = state.separatorChoice) {
+  cancelImport();
   try {
     if (text.length > LIMITS.text) throw new Error("Import limit: 5 MiB of text.");
     const separator = choice === "auto" ? detectSeparator(text)
@@ -886,6 +926,7 @@ function renderTable() {
       input.value = item.row[col] ?? "";
       let editing = false;
       input.addEventListener("input", () => {
+        cancelImport();
         const oldValue = state.rows[item.index][col] ?? "";
         if (state.textLength - oldValue.length + input.value.length > LIMITS.text) {
           input.value = oldValue; showStatus("Document text limit: 5 MiB.", true); return;
@@ -1033,35 +1074,30 @@ function currentViewMarkdown() {
 }
 
 function downloadView() {
-  const blob = new Blob([currentViewCsv()], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "ideo-view.csv";
-  link.click();
-  URL.revokeObjectURL(url);
+  return runOperation("CSV download prepared.", () => {
+    const rows = viewDataRowsOnly();
+    downloadBlob(toCsv(rows, state.separator), "text/csv;charset=utf-8", "ideo-view.csv");
+    if (rows.length === state.rows.length) { state.dirty = false; scheduleDraft(); }
+  });
 }
 
 async function copyText(text) {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
-  } else {
-    const textarea = document.createElement("textarea");
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  const focused = document.activeElement;
+  try {
     textarea.value = text;
     document.body.append(textarea);
     textarea.select();
-    document.execCommand("copy");
-    textarea.remove();
-  }
+    if (!document.execCommand("copy")) throw new Error("Copy failed. Allow clipboard access or download the CSV.");
+  } finally { textarea.remove(); focused?.focus(); }
 }
 
-async function copyView() {
-  await copyText(currentViewCsv());
-}
-
-async function copyMarkdown() {
-  await copyText(currentViewMarkdown());
-}
+function copyView() { return runOperation("CSV copied.", () => copyText(currentViewCsv())); }
+function copyMarkdown() { return runOperation("Markdown copied.", () => copyText(currentViewMarkdown())); }
 
 function xmlEscape(value) {
   const text = String(value ?? "");
@@ -1221,25 +1257,29 @@ function createXlsx(rows) {
 }
 
 function downloadXlsx() {
-  try {
-  const blob = new Blob([createXlsx(viewDataRowsOnly())], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  return runOperation("XLSX download prepared.", () => {
+    const rows = viewDataRowsOnly();
+    downloadBlob(createXlsx(rows), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "ideo-view.xlsx");
+    if (rows.length === state.rows.length) { state.dirty = false; scheduleDraft(); }
   });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "ideo-view.xlsx";
-  link.click();
-  URL.revokeObjectURL(url);
-  showStatus("XLSX download prepared.");
-  } catch (error) { showStatus(error.message, true); }
 }
 
 function readFile(file) {
+  cancelImport();
+  const revision = importRevision;
   if (file.size > LIMITS.text) { showStatus("Import limit: 5 MiB file.", true); return; }
+  showStatus(`Reading ${file.name || "CSV file"}…`);
   const reader = new FileReader();
-  reader.addEventListener("load", () => loadText(String(reader.result ?? "")));
-  reader.readAsText(file);
+  pendingReader = reader;
+  const fail = message => { if (revision === importRevision) { pendingReader = null; showStatus(message, true); } };
+  reader.addEventListener("load", () => {
+    if (revision !== importRevision) return;
+    pendingReader = null;
+    loadText(String(reader.result ?? ""));
+  });
+  reader.addEventListener("error", () => fail("File could not be read. Choose it again or paste its content."));
+  reader.addEventListener("abort", () => fail("File read cancelled."));
+  try { reader.readAsText(file); } catch (error) { fail(error.message); }
 }
 
 els.loadPaste.addEventListener("click", () => loadText(els.csvInput.value));

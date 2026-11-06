@@ -147,7 +147,7 @@ test('regex timeout terminates work and syntax failures are explicit', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(response.matches)), [{id:'r',indices:[1]}]);
 });
 
-test('XLSX rejects unsupported characters with a cell address and preserves text', () => {
+test('XLSX rejects unsupported characters with a cell address and preserves text', async () => {
   const app = harness();
   for (const value of ['x\u0001y', '\uD800', '\uFFFF', 'x'.repeat(32768)]) {
     assert.throws(() => app.run(`createXlsx([['h'],[${JSON.stringify(value)}]])`), /Cell A2/);
@@ -156,7 +156,7 @@ test('XLSX rejects unsupported characters with a cell address and preserves text
   assert.match(xml, /xml:space="preserve"/);
   assert.match(xml, /&#13;\n/);
   assert.match(xml, /&amp; &lt; 😀 _x005F_x0041_/);
-  app.run(String.raw`state.rows=[['h'],['bad\u0001']];downloadXlsx()`);
+  await app.run(String.raw`state.rows=[['h'],['bad\u0001']];downloadXlsx()`);
   assert.match(app.run('els.operation.textContent'), /Cell A2/);
 });
 
@@ -218,4 +218,39 @@ test('structural size failures roll back and recovery drafts restore without rep
   assert.match(app.run('els.operation.textContent'), /500 columns/);
   app.run('clearTimeout(draftTimer)'); restored.run('clearTimeout(draftTimer)');
   assert.ok(saved);
+});
+
+test('latest file or paste wins, and failed reads preserve existing work', () => {
+  const readers = [];
+  class FileReader {
+    constructor() { this.events={};readers.push(this); }
+    addEventListener(name,fn) { this.events[name]=fn; }
+    readAsText() { this.readyState=1; }
+    abort() { this.readyState=2;this.events.abort(); }
+    finish(text) { this.result=text;this.readyState=2;this.events.load(); }
+  }
+  const app = harness({FileReader});
+  app.run(`loadText('original');readFile({size:10,name:'old'});readFile({size:10,name:'new'})`);
+  readers[1].finish('new');readers[0].finish('old');
+  assert.deepEqual(app.json('state.rows'), [['new']]);
+  app.run(`readFile({size:10});loadText('pasted')`);readers[2].finish('late');
+  assert.deepEqual(app.json('state.rows'), [['pasted']]);
+  app.run(`readFile({size:10})`);readers[3].events.error();
+  assert.deepEqual(app.json('state.rows'), [['pasted']]);
+  assert.match(app.run('els.operation.textContent'), /could not be read/);
+});
+
+test('clipboard rejection and failed fallback report errors; late success cannot hide newer errors', async () => {
+  const app = harness({navigator:{clipboard:{writeText:async()=>{throw new Error('Clipboard denied');}}}});
+  assert.equal(await app.run('copyView()'), false);
+  assert.match(app.run('els.operation.textContent'), /Clipboard denied/);
+  const fallback = harness({navigator:{}});
+  fallback.run('document.execCommand=()=>false');
+  assert.equal(await fallback.run('copyView()'), false);
+  assert.match(fallback.run('els.operation.textContent'), /Copy failed/);
+  let finish;
+  const pending = harness({navigator:{clipboard:{writeText:()=>new Promise(resolve=>{finish=resolve;})}}});
+  const promise = pending.run('copyView()');
+  pending.run(`showStatus('Newer error',true)`);finish();await promise;
+  assert.equal(pending.run('els.operation.textContent'), 'Newer error');
 });

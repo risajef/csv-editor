@@ -16,7 +16,7 @@ Run regression checks with `node --test --test-isolation=none tests/*.test.cjs`.
 - [x] 8. Produce valid worksheet XML or report unsupported content.
 - [x] Numeric missing-value and operator semantics.
 - [x] Undo, recovery, and explicit document state boundaries.
-- [ ] Import sequencing and operation error reporting.
+- [x] Import sequencing and operation error reporting.
 - [ ] Explicit spreadsheet-safe CSV export.
 - [ ] Literal Markdown cell export.
 - [ ] Accessible cells, filters, resizing, and movement.
@@ -68,3 +68,7 @@ A numeric comparison remains the selected option when edits make its column mixe
 ### 11 — Make document edits reversible and recoverable
 
 Added a shared document-edit boundary with size validation, rollback, bounded undo/redo snapshots (up to 32 entries / approximately 32 MiB per stack, retaining at least the newest entry), and grouped cell edits. Imports, structural edits and delimiter changes are reversible. Import source remains separate from edited rows; changing the output delimiter after editing no longer reparses edited values. Debounced recovery snapshots use browser tab session storage, with explicit restore/discard controls and an unsaved-work unload guard. Quota/storage failures leave editing available and display recovery status. Regression covers delete/undo/redo, replacement imports, cell history, delimiter changes, oversized-command rollback and explicit draft recovery. Validation: 14 tests passed.
+
+### 12 — Sequence imports and surface operation failures
+
+A new import, paste, undo or document edit cancels pending file reads; obsolete callbacks cannot overwrite newer work. File read/abort failures preserve the document and report an actionable message. Clipboard rejection and fallback failure are caught, temporary controls are cleaned up, and late operation completions cannot hide newer status messages. Downloads share cleanup and delayed URL revocation, show failures, and clear the unload guard only when the complete document is included. Validation: 16 tests passed, including reversed read completion, paste superseding a file, read errors, clipboard denial, fallback failure and stale completion status.
