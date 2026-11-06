@@ -24,6 +24,8 @@ let draftTimer;
 let importRevision = 0;
 let pendingReader = null;
 let operationRevision = 0;
+let pointerActive = false;
+let editRefreshPending = false;
 const DRAFT_KEY = "ideo-csv-draft-v1";
 const DOCUMENT_FIELDS = ["rows", "filters", "sort", "colWidths", "separator", "separatorChoice", "rawText", "sourceText", "edited", "dirty", "page", "textLength"];
 const els = {
@@ -609,6 +611,8 @@ function renderFilters() {
     toggle.title = filter.enabled ? "Filter enabled" : "Filter disabled";
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
+    checkbox.dataset.filterId = filter.id;
+    checkbox.dataset.filterField = "enabled";
     checkbox.checked = filter.enabled;
     checkbox.setAttribute("aria-label", `Enable filter on ${headerName(filter.column)}`);
     checkbox.addEventListener("change", () => setFilter(filter.id, { enabled: checkbox.checked }));
@@ -618,6 +622,8 @@ function renderFilters() {
     columnLabel.title = "Column";
     columnLabel.textContent = "Column";
     const column = document.createElement("select");
+    column.dataset.filterId = filter.id;
+    column.dataset.filterField = "column";
     for (let i = 0; i < columns; i += 1) {
       const option = document.createElement("option");
       option.value = String(i);
@@ -632,6 +638,8 @@ function renderFilters() {
     operatorLabel.title = "Match";
     operatorLabel.textContent = "Match";
     const operator = document.createElement("select");
+    operator.dataset.filterId = filter.id;
+    operator.dataset.filterField = "operator";
     for (const [value, label] of operatorOptions(isNumericColumn(filter.column), filter.operator)) {
       const option = document.createElement("option");
       option.value = value;
@@ -646,6 +654,8 @@ function renderFilters() {
     valueLabel.title = "Value";
     valueLabel.textContent = "Value";
     const value = document.createElement("input");
+    value.dataset.filterId = filter.id;
+    value.dataset.filterField = "value";
     value.value = filter.value;
     value.disabled = filter.operator === "empty" || filter.operator === "not-empty";
     value.addEventListener("input", () => {
@@ -1014,10 +1024,10 @@ function renderTable() {
         tr.style.height = `${rowHeight(item.index)}px`;
       });
       input.addEventListener("change", () => {
-        renderValidation();
-        renderFilters();
-        renderTable();
-        renderStats();
+        editRefreshPending = true;
+        // Let native focus navigation finish. Pointer actions flush after click,
+        // so rendering cannot remove their target between pointerdown and click.
+        setTimeout(flushEditRefresh, 0);
       });
       td.append(input);
       tr.append(td);
@@ -1030,11 +1040,29 @@ function renderTable() {
   applyRowHeights();
 }
 
+function flushEditRefresh() {
+  if (!editRefreshPending || pointerActive) return;
+  render();
+}
+
 function render() {
+  editRefreshPending = false;
+  const active = document.activeElement;
+  const selection = typeof active?.selectionStart === "number" ? [active.selectionStart, active.selectionEnd] : null;
+  const identity = active?.dataset ? { ...active.dataset, id: active.id } : {};
   renderValidation();
   renderFilters();
   renderTable();
   renderStats();
+  let target;
+  if (identity.cell) target = els.tableWrap.querySelector(`[data-cell="${identity.cell}"]`);
+  else if (identity.filterId) target = Array.from(els.filtersList.querySelectorAll("[data-filter-id]"))
+    .find(element => element.dataset.filterId === identity.filterId && element.dataset.filterField === identity.filterField);
+  else if (identity.id) target = document.getElementById(identity.id);
+  if (target && !target.disabled) {
+    target.focus({ preventScroll: true });
+    if (selection && typeof target.setSelectionRange === "function") target.setSelectionRange(...selection);
+  }
 }
 
 function insertRow(index = state.rows.length) {
@@ -1417,6 +1445,15 @@ catch { els.restoreDraft.hidden = els.discardDraft.hidden = true; }
 window.addEventListener("beforeunload", event => {
   if (state.dirty) { saveDraft(); event.preventDefault(); event.returnValue = ""; }
 });
+document.addEventListener("pointerdown", () => { pointerActive = true; }, true);
+document.addEventListener("click", () => { pointerActive = false; flushEditRefresh(); });
+document.addEventListener("pointercancel", () => { pointerActive = false; flushEditRefresh(); });
+document.addEventListener("pointerup", event => {
+  // A click in this document follows pointerup in the same event sequence.
+  // Releasing outside the document falls back to the window blur handler.
+  if (event.target === document.documentElement) { pointerActive = false; flushEditRefresh(); }
+});
+window.addEventListener("blur", () => { pointerActive = false; flushEditRefresh(); });
 refreshHistory();
 window.addEventListener("resize", queueRenderedRowHeightUpdate);
 

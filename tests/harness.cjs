@@ -24,7 +24,7 @@ function harness(extra = {}) {
       addEventListener() {}, removeEventListener() {}, body: new Element('body'),
     },
     window: { addEventListener() {} }, TextEncoder, Uint8Array, Blob, console,
-    setTimeout, clearTimeout, requestAnimationFrame: callback => callback(), ...extra,
+    setTimeout, clearTimeout, queueMicrotask, requestAnimationFrame: callback => callback(), ...extra,
   });
   for (const file of ['csv.js', 'document.js', 'app.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context);
   return { context, elements, run: code => vm.runInContext(code, context), json: code => JSON.parse(JSON.stringify(vm.runInContext(code, context))) };

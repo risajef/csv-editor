@@ -84,3 +84,7 @@ Encode user HTML and Markdown punctuation as character entities; only generated 
 ### 15 — Name generated controls and support keyboard/touch operations
 
 Cells, filter toggles, deletion actions and table controls have explicit accessible names. Column headers expose sort state and row/column headers support Alt+arrow movement with focus restored to the moved handle. Focusable column separators expose current/minimum/maximum widths, Arrow keys resize, Enter fits content, and pointer capture supports touch/pen/mouse dragging and cancellation. Added visible focus styling. Validation: 19 Node regressions passed, including keyboard movement, selected filter names and width updates. Headless Chromium now launches with the required sandbox exception; browser interaction QA follows before final sign-off.
+
+### 16 — Preserve actions and focus when leaving edited cells
+
+Real Chromium testing exposed table reconstruction between pointerdown and click: edit-then-delete lost the delete action, while Tab navigation dropped focus onto the body. Edit refresh now waits until native focus navigation or the complete pointer click, then restores matching cell/filter focus and text selection. Added a reusable local browser smoke suite covering the exact failures, keyboard movement/resizing, undo and real regex-worker results, invalid patterns and one-second termination. Validation: 19 Node tests and the Chromium smoke suite passed (Chrome 131.0.6778.204). This is an additional defect confirmed during browser QA, committed independently of the accessibility changes.
