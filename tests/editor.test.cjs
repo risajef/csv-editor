@@ -181,3 +181,41 @@ test('active numeric operator remains represented after a column becomes mixed',
   assert.equal(app.run(`els.filtersList.children[0].children[2].children[0].children.find(option=>option.selected).value`), 'gt');
   assert.deepEqual(app.json('viewDataRowsOnly()'), [['n'],['1']]);
 });
+
+test('document edits, replacement imports and cell changes have undo and redo', () => {
+  const app = harness();
+  app.run(String.raw`loadText('a,b\n1,2');deleteRow(1);undo()`);
+  assert.deepEqual(app.json('state.rows'), [['a','b'],['1','2']]);
+  app.run('redo()'); assert.equal(app.run('state.rows.length'), 1);
+  app.run(String.raw`loadText('other\nx');undo()`);
+  assert.deepEqual(app.json('state.rows'), [['a','b']]);
+  app.run('undo()');
+  const original = app.json('state.rows');
+  app.run(`var cell=els.tableWrap.children[0].children[2].children[1].children[1].children[0];cell.value='edited';cell.events.input()`);
+  assert.equal(app.run('state.rows[1][0]'), 'edited');
+  app.run('undo()'); assert.deepEqual(app.json('state.rows'), original);
+  app.run('redo()'); assert.equal(app.run('state.rows[1][0]'), 'edited');
+  app.run(`els.separator.value=';';els.separator.events.change()`);
+  assert.equal(app.run('currentViewCsv()'), 'a;b\nedited;2');
+  assert.equal(app.run('state.sourceText'), 'a,b\n1,2');
+  app.run('undo()'); assert.equal(app.run('state.separator'), ',');
+});
+
+test('structural size failures roll back and recovery drafts restore without replacing silently', () => {
+  const storage = new Map();
+  const sessionStorage = { getItem: key => storage.get(key) || null, setItem: (key,value) => storage.set(key,value), removeItem: key => storage.delete(key) };
+  const app = harness({ sessionStorage });
+  app.run(String.raw`loadText('a,b\n1,2');deleteColumn(0);saveDraft()`);
+  const saved = storage.get('ideo-csv-draft-v1');
+  const restored = harness({sessionStorage});
+  assert.equal(restored.run('state.rows.length'), 0);
+  restored.run('els.restoreDraft.events.click()');
+  assert.deepEqual(restored.json('state.rows'), [['b'],['2']]);
+  assert.equal(restored.run('state.dirty'), true);
+  restored.run('undo()'); assert.deepEqual(restored.json('state.rows'), []);
+  app.run(`clearTimeout(draftTimer);state.rows=[Array(500).fill('x')];state.colWidths=Array(500).fill(160);insertColumn(2)`);
+  assert.equal(app.run('maxColumns()'), 500);
+  assert.match(app.run('els.operation.textContent'), /500 columns/);
+  app.run('clearTimeout(draftTimer)'); restored.run('clearTimeout(draftTimer)');
+  assert.ok(saved);
+});

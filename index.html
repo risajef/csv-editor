@@ -15,6 +15,8 @@
           <p>Online CSV editor</p>
         </div>
         <div class="top-actions">
+          <button id="undo" type="button" title="Undo document edit">Undo</button>
+          <button id="redo" type="button" title="Redo document edit">Redo</button>
           <button id="copy-view" class="icon-button" type="button" title="Copy current view" aria-label="Copy current view">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
           </button>
@@ -69,6 +71,11 @@
 
       <div id="operation-status" class="status-card" role="status" aria-live="polite"></div>
 
+      <div class="panel-heading">
+        <span id="draft-status" role="status"></span>
+        <button id="restore-draft" type="button" hidden>Restore recovery draft</button>
+        <button id="discard-draft" type="button" hidden>Discard recovery draft</button>
+      </div>
       <section class="workspace">
         <aside class="filters-panel" aria-label="Filters">
           <div class="panel-heading">
@@ -92,6 +99,7 @@
     </main>
 
     <script src="csv.js"></script>
+    <script src="document.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

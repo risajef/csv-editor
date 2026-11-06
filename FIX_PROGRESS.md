@@ -15,7 +15,7 @@ Run regression checks with `node --test --test-isolation=none tests/*.test.cjs`.
 - [x] 7. Isolate regex evaluation with cancellation and errors.
 - [x] 8. Produce valid worksheet XML or report unsupported content.
 - [x] Numeric missing-value and operator semantics.
-- [ ] Undo, recovery, and explicit document state boundaries.
+- [x] Undo, recovery, and explicit document state boundaries.
 - [ ] Import sequencing and operation error reporting.
 - [ ] Explicit spreadsheet-safe CSV export.
 - [ ] Literal Markdown cell export.
@@ -64,3 +64,7 @@ Numeric comparisons now skip blank, whitespace-only and nonnumeric operands. Bla
 ### 10 — Keep active operators visible after data-type changes
 
 A numeric comparison remains the selected option when edits make its column mixed, with a “numeric values only” label explaining that blank/nonnumeric cells do not match. The dropdown no longer silently displays equality while running another comparison. Validation: 12 tests passed.
+
+### 11 — Make document edits reversible and recoverable
+
+Added a shared document-edit boundary with size validation, rollback, bounded undo/redo snapshots (up to 32 entries / approximately 32 MiB per stack, retaining at least the newest entry), and grouped cell edits. Imports, structural edits and delimiter changes are reversible. Import source remains separate from edited rows; changing the output delimiter after editing no longer reparses edited values. Debounced recovery snapshots use browser tab session storage, with explicit restore/discard controls and an unsaved-work unload guard. Quota/storage failures leave editing available and display recovery status. Regression covers delete/undo/redo, replacement imports, cell history, delimiter changes, oversized-command rollback and explicit draft recovery. Validation: 14 tests passed.

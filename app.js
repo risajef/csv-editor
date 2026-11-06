@@ -1,6 +1,10 @@
 const LIMITS = Object.freeze({ text: 5 * 1024 * 1024, rows: 50000, columns: 500, cells: 1000000 });
 const state = {
   rawText: "",
+  sourceText: "",
+  edited: false,
+  dirty: false,
+  textLength: 0,
   separatorChoice: "auto",
   separator: ",",
   rows: [],
@@ -15,7 +19,16 @@ const state = {
   visibleCount: 0,
 };
 
+const history = new DocumentHistory();
+let draftTimer;
+const DRAFT_KEY = "ideo-csv-draft-v1";
+const DOCUMENT_FIELDS = ["rows", "filters", "sort", "colWidths", "separator", "separatorChoice", "rawText", "sourceText", "edited", "dirty", "page", "textLength"];
 const els = {
+  undo: document.querySelector("#undo"),
+  redo: document.querySelector("#redo"),
+  restoreDraft: document.querySelector("#restore-draft"),
+  discardDraft: document.querySelector("#discard-draft"),
+  draftStatus: document.querySelector("#draft-status"),
   previousPage: document.querySelector("#previous-page"),
   nextPage: document.querySelector("#next-page"),
   pageInfo: document.querySelector("#page-info"),
@@ -86,15 +99,87 @@ function assertDocumentSize(rows) {
   }
 }
 
-function loadText(text) {
+function captureDocument() {
+  return JSON.stringify(Object.fromEntries(DOCUMENT_FIELDS.map(key => [key, state[key]])));
+}
+
+function refreshHistory() {
+  els.undo.disabled = !history.past.length;
+  els.redo.disabled = !history.future.length;
+}
+
+function saveDraft() {
+  try {
+    if (typeof sessionStorage === "undefined") return;
+    sessionStorage.setItem(DRAFT_KEY, captureDocument());
+    els.draftStatus.textContent = "Recovery draft saved for this browser tab.";
+  } catch { els.draftStatus.textContent = "Recovery draft unavailable; download your work before closing."; }
+}
+
+function scheduleDraft() { if (typeof sessionStorage === "undefined") return; clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 300); }
+
+function restoreSnapshot(snapshot) {
+  const data = JSON.parse(snapshot);
+  assertDocumentSize(data.rows);
+  for (const key of DOCUMENT_FIELDS) if (Object.hasOwn(data, key)) state[key] = data[key];
+  state.textLength = state.rows.reduce((sum, row) => sum + row.reduce((n, cell) => n + cell.length, 0), 0);
+  invalidateRegex();
+  recalculateAllRowHeights();
+  els.csvInput.value = state.sourceText;
+  els.separator.value = state.separatorChoice;
+  refreshHistory();
+  render();
+}
+
+function undo() {
+  const snapshot = history.undo(captureDocument());
+  if (snapshot !== null) { restoreSnapshot(snapshot); state.dirty = true; scheduleDraft(); }
+}
+
+function redo() {
+  const snapshot = history.redo(captureDocument());
+  if (snapshot !== null) { restoreSnapshot(snapshot); state.dirty = true; scheduleDraft(); }
+}
+
+function editDocument(mutate) {
+  const before = captureDocument();
+  try {
+    mutate();
+    assertDocumentSize(state.rows);
+    state.textLength = state.rows.reduce((sum, row) => sum + row.reduce((n, cell) => n + cell.length, 0), 0);
+    if (state.textLength > LIMITS.text) throw new Error("Document text limit: 5 MiB.");
+    history.remember(before);
+    state.rawText = null;
+    state.edited = true;
+    state.dirty = true;
+    invalidateRegex();
+    recalculateAllRowHeights();
+    refreshHistory();
+    scheduleDraft();
+    render();
+    return true;
+  } catch (error) {
+    restoreSnapshot(before);
+    showStatus(error.message, true);
+    return false;
+  }
+}
+
+function loadText(text, choice = state.separatorChoice) {
   try {
     if (text.length > LIMITS.text) throw new Error("Import limit: 5 MiB of text.");
-    const separator = state.separatorChoice === "auto" ? detectSeparator(text)
-      : state.separatorChoice === "tab" ? "\t" : state.separatorChoice;
+    const separator = choice === "auto" ? detectSeparator(text)
+      : choice === "tab" ? "\t" : choice;
     const rows = parseCsv(text, separator);
     assertDocumentSize(rows);
+    history.remember(captureDocument());
     invalidateRegex();
     state.rawText = text;
+    state.sourceText = text;
+    state.edited = false;
+    state.dirty = true;
+    state.textLength = rows.reduce((sum, row) => sum + row.reduce((n, cell) => n + cell.length, 0), 0);
+    state.separatorChoice = choice;
     state.separator = separator;
     state.rows = rows;
     state.filters = [];
@@ -104,6 +189,8 @@ function loadText(text) {
     els.csvInput.value = text;
     if (state.rows.length) els.importPanel.open = false;
     showStatus("");
+    refreshHistory();
+    scheduleDraft();
     render();
     return true;
   } catch (error) {
@@ -373,6 +460,7 @@ function dropItem(event, type, index) {
 
 function reorderRow(fromIndex, targetIndex) {
   if (fromIndex === 0 || targetIndex === 0 || fromIndex === targetIndex) return;
+  return editDocument(() => {
 
   const [row] = state.rows.splice(fromIndex, 1);
   const [height] = state.rowHeights.splice(fromIndex, 1);
@@ -380,13 +468,15 @@ function reorderRow(fromIndex, targetIndex) {
   state.rows.splice(insertionIndex, 0, row);
   state.rowHeights.splice(insertionIndex, 0, height);
   state.sort = null;
-  invalidateRegex();
-  state.rawText = toCsv(state.rows, state.separator);
-  render();
+
+
+
+  });
 }
 
 function reorderColumn(fromIndex, targetIndex) {
   if (fromIndex === targetIndex) return;
+  return editDocument(() => {
 
   const order = Array.from({ length: maxColumns() }, (_, index) => index);
   const [moved] = order.splice(fromIndex, 1);
@@ -399,18 +489,16 @@ function reorderColumn(fromIndex, targetIndex) {
 
   remapColumnReferences(new Map(order.map((oldIndex, newIndex) => [oldIndex, newIndex])));
 
-  recalculateAllRowHeights();
-  invalidateRegex();
-  state.rawText = toCsv(state.rows, state.separator);
-  render();
+
+
+
+
+  });
 }
 
 function addFilter() {
   if (!state.rows.length) {
-    state.rows = [["Column 1"], [""]];
-    resetTableSizes();
-    invalidateRegex();
-  state.rawText = toCsv(state.rows, state.separator);
+    editDocument(() => { state.rows = [["Column 1"], [""]]; state.colWidths = [160]; });
   }
 
   state.filters.push({
@@ -796,7 +884,16 @@ function renderTable() {
       if (item.row.length !== columns) td.className = "cell-error";
       const input = document.createElement("textarea");
       input.value = item.row[col] ?? "";
+      let editing = false;
       input.addEventListener("input", () => {
+        const oldValue = state.rows[item.index][col] ?? "";
+        if (state.textLength - oldValue.length + input.value.length > LIMITS.text) {
+          input.value = oldValue; showStatus("Document text limit: 5 MiB.", true); return;
+        }
+        if (!editing) { history.remember(captureDocument()); editing = true; refreshHistory(); }
+        state.textLength += input.value.length - oldValue.length;
+        state.edited = state.dirty = true;
+        scheduleDraft();
         while (state.rows[item.index].length <= col) state.rows[item.index].push("");
         state.rows[item.index][col] = input.value;
         invalidateRegex();
@@ -829,21 +926,27 @@ function render() {
 }
 
 function insertRow(index = state.rows.length) {
+  return editDocument(() => {
   const width = Math.max(1, maxColumns());
   const row = Array.from({ length: width }, () => "");
   state.rows.splice(index, 0, row);
-  recalculateAllRowHeights();
-  invalidateRegex();
-  state.rawText = toCsv(state.rows, state.separator);
-  render();
+
+
+
+
+
+  });
 }
 
 function deleteRow(index) {
+  return editDocument(() => {
   state.rows.splice(index, 1);
   state.rowHeights.splice(index, 1);
-  invalidateRegex();
-  state.rawText = toCsv(state.rows, state.separator);
-  render();
+
+
+
+
+  });
 }
 
 // Every structural edit updates references through the same mapping boundary.
@@ -855,6 +958,7 @@ function remapColumnReferences(columnMap) {
 }
 
 function insertColumn(index = maxColumns()) {
+  return editDocument(() => {
   if (!state.rows.length) state.rows.push([]);
   remapColumnReferences(new Map(Array.from({ length: maxColumns() }, (_, col) => [col, col >= index ? col + 1 : col])));
   state.rows.forEach(row => {
@@ -862,23 +966,29 @@ function insertColumn(index = maxColumns()) {
     row.splice(index, 0, "");
   });
   state.colWidths.splice(index, 0, 160);
-  recalculateAllRowHeights();
-  invalidateRegex();
-  state.rawText = toCsv(state.rows, state.separator);
-  render();
+
+
+
+
+
+  });
 }
 
 function deleteColumn(index) {
+  return editDocument(() => {
   remapColumnReferences(new Map(Array.from({ length: maxColumns() }, (_, col) => [col, col > index ? col - 1 : col]).filter(([col]) => col !== index)));
   state.rows.forEach((row) => row.splice(index, 1));
   state.colWidths.splice(index, 1);
-  recalculateAllRowHeights();
-  invalidateRegex();
-  state.rawText = toCsv(state.rows, state.separator);
-  render();
+
+
+
+
+
+  });
 }
 
 function transpose() {
+  return editDocument(() => {
   const width = maxColumns();
   const height = state.rows.length;
   const next = [];
@@ -892,10 +1002,12 @@ function transpose() {
   state.rows = next;
   state.filters = [];
   state.sort = null;
-  resetTableSizes();
-  invalidateRegex();
-  state.rawText = toCsv(state.rows, state.separator);
-  render();
+  state.colWidths = Array.from({ length: maxColumns() }, () => 160);
+
+
+
+
+  });
 }
 
 function currentViewCsv() {
@@ -1142,9 +1254,15 @@ els.fileInput.addEventListener("change", () => {
 });
 els.separator.addEventListener("change", () => {
   const previous = state.separatorChoice;
-  const text = state.rawText ?? toCsv(state.rows, state.separator);
-  state.separatorChoice = els.separator.value;
-  if (!loadText(text)) { state.separatorChoice = previous; els.separator.value = previous; }
+  const choice = els.separator.value;
+  if (state.edited) {
+    editDocument(() => {
+      state.separatorChoice = choice;
+      state.separator = choice === "tab" ? "\t" : choice === "auto" ? detectSeparator(state.sourceText) : choice;
+    });
+  } else {
+    if (!loadText(state.sourceText, choice)) { state.separatorChoice = previous; els.separator.value = previous; }
+  }
 });
 els.dropZone.addEventListener("dragover", (event) => {
   event.preventDefault();
@@ -1164,6 +1282,30 @@ els.copyMarkdown.addEventListener("click", copyMarkdown);
 els.downloadXlsx.addEventListener("click", downloadXlsx);
 els.previousPage.addEventListener("click", () => { state.page -= 1; renderTable(); renderStats(); });
 els.nextPage.addEventListener("click", () => { state.page += 1; renderTable(); renderStats(); });
+els.undo.addEventListener("click", undo);
+els.redo.addEventListener("click", redo);
+els.restoreDraft.addEventListener("click", () => {
+  try {
+    const snapshot = sessionStorage.getItem(DRAFT_KEY);
+    if (!snapshot) return;
+    const previous = captureDocument();
+    restoreSnapshot(snapshot);
+    history.remember(previous);
+    state.dirty = true;
+    refreshHistory();
+    showStatus("Recovery draft restored.");
+  } catch (error) { showStatus(`Draft could not be restored: ${error.message}`, true); }
+});
+els.discardDraft.addEventListener("click", () => {
+  try { clearTimeout(draftTimer); sessionStorage.removeItem(DRAFT_KEY); els.restoreDraft.hidden = els.discardDraft.hidden = true; els.draftStatus.textContent = "Recovery draft discarded."; }
+  catch (error) { showStatus(error.message, true); }
+});
+try { els.restoreDraft.hidden = els.discardDraft.hidden = !sessionStorage.getItem(DRAFT_KEY); }
+catch { els.restoreDraft.hidden = els.discardDraft.hidden = true; }
+window.addEventListener("beforeunload", event => {
+  if (state.dirty) { saveDraft(); event.preventDefault(); event.returnValue = ""; }
+});
+refreshHistory();
 window.addEventListener("resize", queueRenderedRowHeightUpdate);
 
 render();

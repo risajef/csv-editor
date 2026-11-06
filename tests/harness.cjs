@@ -26,7 +26,7 @@ function harness(extra = {}) {
     window: { addEventListener() {} }, TextEncoder, Uint8Array, Blob, console,
     setTimeout, clearTimeout, requestAnimationFrame: callback => callback(), ...extra,
   });
-  for (const file of ['csv.js', 'app.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context);
+  for (const file of ['csv.js', 'document.js', 'app.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context);
   return { context, elements, run: code => vm.runInContext(code, context), json: code => JSON.parse(JSON.stringify(vm.runInContext(code, context))) };
 }
 module.exports = { harness, Element };
