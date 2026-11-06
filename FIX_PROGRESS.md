@@ -1,0 +1,30 @@
+# CSV Editor fix progress
+
+Started 6 November 2026 from `ca95db6`. Each numbered fix is a separate subrepo commit containing its regression checks and progress entry. No parent-repository commit, staging, publishing, or deployment is part of this work.
+
+Run regression checks with `node --test --test-isolation=none tests/*.test.cjs`.
+
+## Review checklist
+
+- [x] 1. Preserve incomplete CSV records; remove implicit repair.
+- [ ] 2. Preserve filter/sort references on column insertion.
+- [ ] 3. Preserve positions in ragged rows during structural edits.
+- [ ] 4. Remove input-sized argument spreads from export and maxima.
+- [ ] 5. Bound rendering work and input size.
+- [ ] 6. Diagnose CSV syntax and preserve empty records.
+- [ ] 7. Isolate regex evaluation with cancellation and errors.
+- [ ] 8. Produce valid worksheet XML or report unsupported content.
+- [ ] Numeric missing-value and operator semantics.
+- [ ] Undo, recovery, and explicit document state boundaries.
+- [ ] Import sequencing and operation error reporting.
+- [ ] Explicit spreadsheet-safe CSV export.
+- [ ] Literal Markdown cell export.
+- [ ] Accessible cells, filters, resizing, and movement.
+- [ ] Standalone theme and usage documentation.
+- [ ] Architecture separation and final quality gate.
+
+## Completed fixes
+
+### 1 — Preserve imported record boundaries
+
+Removed automatic folding of short rows into a preceding cell. Length validation now sees the original records. Added a Node regression harness and checks for an incomplete data record and an incomplete first data record. Validation: `node --test --test-isolation=none tests/*.test.cjs` passed (1 test).

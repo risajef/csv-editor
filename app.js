@@ -145,26 +145,7 @@ function parseCsv(text, sep) {
     return !isTrailingEmpty;
   });
 
-  return repairUnquotedMultilineRows(parsed, sep);
-}
-
-function repairUnquotedMultilineRows(rows, sep) {
-  const expected = rows.find((row) => row.length > 1)?.length || 0;
-  if (!expected) return rows;
-
-  const repaired = [];
-  for (const row of rows) {
-    const previous = repaired[repaired.length - 1];
-    const canFold = previous && previous.length === expected && row.length !== expected && row.length < expected;
-
-    if (canFold) {
-      previous[previous.length - 1] += `\n${row.join(sep)}`;
-    } else {
-      repaired.push(row);
-    }
-  }
-
-  return repaired;
+  return parsed;
 }
 
 function csvEscape(value, sep) {
