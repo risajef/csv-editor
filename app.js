@@ -387,9 +387,8 @@ function reorderColumn(fromIndex, targetIndex) {
   const insertionIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex;
   order.splice(insertionIndex, 0, moved);
 
-  state.rows = state.rows.map((row) => order
-    .filter((index) => index < row.length)
-    .map((index) => row[index]));
+  // A permutation must retain missing positions rather than collapse them.
+  state.rows = state.rows.map(row => order.map(index => row[index] ?? ""));
   state.colWidths = order.map((index) => state.colWidths[index] || 160);
 
   remapColumnReferences(new Map(order.map((oldIndex, newIndex) => [oldIndex, newIndex])));
@@ -828,7 +827,10 @@ function remapColumnReferences(columnMap) {
 function insertColumn(index = maxColumns()) {
   if (!state.rows.length) state.rows.push([]);
   remapColumnReferences(new Map(Array.from({ length: maxColumns() }, (_, col) => [col, col >= index ? col + 1 : col])));
-  state.rows.forEach((row) => row.splice(index, 0, ""));
+  state.rows.forEach(row => {
+    while (row.length < index) row.push("");
+    row.splice(index, 0, "");
+  });
   state.colWidths.splice(index, 0, 160);
   recalculateAllRowHeights();
   state.rawText = toCsv(state.rows, state.separator);

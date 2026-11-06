@@ -8,7 +8,7 @@ Run regression checks with `node --test --test-isolation=none tests/*.test.cjs`.
 
 - [x] 1. Preserve incomplete CSV records; remove implicit repair.
 - [x] 2. Preserve filter/sort references on column insertion.
-- [ ] 3. Preserve positions in ragged rows during structural edits.
+- [x] 3. Preserve positions in ragged rows during structural edits.
 - [ ] 4. Remove input-sized argument spreads from export and maxima.
 - [ ] 5. Bound rendering work and input size.
 - [ ] 6. Diagnose CSV syntax and preserve empty records.
@@ -32,3 +32,7 @@ Removed automatic folding of short rows into a preceding cell. Length validation
 ### 2 — Keep column references aligned
 
 Centralized reference remapping for insertion, deletion, and movement. Existing filters and sorting now follow their original column when a preceding column is inserted. Regression covers insertion → deletion → movement and deletion of the referenced column. Validation: 2 tests passed.
+
+### 3 — Preserve missing-cell positions
+
+Column permutations now materialize absent cells as empty strings; insertion pads only up to its target position. Imported ragged rows remain intact until an explicit structural operation needs those positions. Deletion and transpose retain positional meaning. Regression exercises movement, insertion, deletion and transpose on incomplete rows. Validation: 3 tests passed.

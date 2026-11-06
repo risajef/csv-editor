@@ -26,3 +26,15 @@ test('column insertion, deletion and movement preserve filter and sort identity'
   assert.equal(app.run('state.filters.length'), 0);
   assert.equal(app.run('state.sort'), null);
 });
+
+test('ragged rows keep cells in their columns through movement and insertion', () => {
+  const app = harness();
+  app.run(String.raw`loadText('a,b,c\nA,B'); reorderColumn(2,0)`);
+  assert.deepEqual(app.json('state.rows'), [['c','a','b'],['','A','B']]);
+  app.run(String.raw`loadText('a,b,c\nA'); insertColumn(2)`);
+  assert.deepEqual(app.json('state.rows[1]'), ['A','','']);
+  app.run('deleteColumn(0)');
+  assert.deepEqual(app.json('state.rows[1]'), ['','']);
+  app.run('transpose()');
+  assert.deepEqual(app.json('state.rows'), [['b',''],['',''],['c','']]);
+});
