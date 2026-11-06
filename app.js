@@ -275,7 +275,7 @@ function longestLineLength(value) {
 
 function autoSizeColumn(index) {
   const maxLength = state.rows.reduce((longest, row) => Math.max(longest, longestLineLength(row[index])), headerName(index).length);
-  state.colWidths[index] = Math.max(48, Math.ceil(maxLength * 7.2) + 24);
+  setColumnWidth(index, Math.ceil(maxLength * 7.2) + 24);
   const col = els.tableWrap.querySelector(`[data-col-width="${index}"]`);
   if (col) col.style.width = `${state.colWidths[index]}px`;
   const table = els.tableWrap.querySelector("table");
@@ -610,6 +610,7 @@ function renderFilters() {
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = filter.enabled;
+    checkbox.setAttribute("aria-label", `Enable filter on ${headerName(filter.column)}`);
     checkbox.addEventListener("change", () => setFilter(filter.id, { enabled: checkbox.checked }));
     toggle.append(checkbox);
 
@@ -659,6 +660,7 @@ function renderFilters() {
     remove.className = "small-button icon-button danger";
     remove.append(icon("close"));
     remove.title = "Delete filter";
+    remove.setAttribute("aria-label", `Delete filter on ${headerName(filter.column)}`);
     remove.addEventListener("click", () => deleteFilter(filter.id));
 
     row.append(toggle, columnLabel, operatorLabel, valueLabel, remove);
@@ -683,27 +685,57 @@ function renderStats() {
     : "Drop, choose, or paste data";
 }
 
+function setColumnWidth(index, width) {
+  state.colWidths[index] = Math.max(48, Math.min(4000, width));
+  const col = els.tableWrap.querySelector(`[data-col-width="${index}"]`);
+  if (col) col.style.width = `${state.colWidths[index]}px`;
+  const resizer = els.tableWrap.querySelector(`[data-resize-column="${index}"]`);
+  if (resizer) resizer.setAttribute("aria-valuenow", String(state.colWidths[index]));
+  const table = els.tableWrap.querySelector("table");
+  if (table) table.style.width = `${tableWidth()}px`;
+  queueRenderedRowHeightUpdate();
+  scheduleDraft();
+}
+
 function resizeColumn(index, event) {
+  if (event.button !== 0) return;
   event.preventDefault();
   const startX = event.clientX;
   const startWidth = colWidth(index);
+  const handle = event.currentTarget;
+  handle.setPointerCapture(event.pointerId);
+  const move = moveEvent => {
+    if (moveEvent.pointerId === event.pointerId) setColumnWidth(index, startWidth + moveEvent.clientX - startX);
+  };
+  const stop = stopEvent => {
+    if (stopEvent.pointerId !== event.pointerId) return;
+    handle.removeEventListener("pointermove", move);
+    handle.removeEventListener("pointerup", stop);
+    handle.removeEventListener("pointercancel", stop);
+    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+  };
+  handle.addEventListener("pointermove", move);
+  handle.addEventListener("pointerup", stop);
+  handle.addEventListener("pointercancel", stop);
+}
 
-  function move(moveEvent) {
-    state.colWidths[index] = Math.max(72, startWidth + moveEvent.clientX - startX);
-    const col = els.tableWrap.querySelector(`[data-col-width="${index}"]`);
-    if (col) col.style.width = `${state.colWidths[index]}px`;
-    const table = els.tableWrap.querySelector("table");
-    if (table) table.style.width = `${tableWidth()}px`;
-    queueRenderedRowHeightUpdate();
+function moveWithKeyboard(event, type, index) {
+  if (event.target !== event.currentTarget || !event.altKey) return;
+  const backward = type === "column" ? "ArrowLeft" : "ArrowUp";
+  const forward = type === "column" ? "ArrowRight" : "ArrowDown";
+  if (![backward, forward].includes(event.key)) return;
+  event.preventDefault();
+  const direction = event.key === backward ? -1 : 1;
+  const destination = index + direction;
+  const minimum = type === "row" ? 1 : 0;
+  const count = type === "row" ? state.rows.length : maxColumns();
+  if (destination < minimum || destination >= count) return;
+  const target = direction < 0 ? destination : index + 2;
+  const changed = type === "row" ? reorderRow(index, target) : reorderColumn(index, target);
+  if (changed) {
+    els.tableWrap.querySelector(`[data-${type}-handle="${destination}"]`)?.focus();
+    showStatus(`${type === "row" ? "Row" : "Column"} moved to position ${destination + 1}.`);
   }
-
-  function stop() {
-    document.removeEventListener("mousemove", move);
-    document.removeEventListener("mouseup", stop);
-  }
-
-  document.addEventListener("mousemove", move);
-  document.addEventListener("mouseup", stop);
 }
 
 function tableWidth(columns = maxColumns()) {
@@ -766,6 +798,7 @@ function renderTable() {
   els.previousPage.disabled = state.page === 0;
   els.nextPage.disabled = state.page >= pages - 1;
   const table = document.createElement("table");
+  table.setAttribute("aria-label", "CSV document");
   table.style.width = `${tableWidth(columns)}px`;
   const colgroup = document.createElement("colgroup");
   const rowCol = document.createElement("col");
@@ -792,12 +825,14 @@ function renderTable() {
   transposeButton.className = "small-button icon-button";
   transposeButton.append(icon("swap"));
   transposeButton.title = "Transpose table";
+  transposeButton.setAttribute("aria-label", "Transpose table");
   transposeButton.addEventListener("click", transpose);
   const addRowButton = document.createElement("button");
   addRowButton.type = "button";
   addRowButton.className = "small-button icon-button";
   addRowButton.append(icon("add"));
   addRowButton.title = "Insert row";
+  addRowButton.setAttribute("aria-label", "Append row");
   addRowButton.addEventListener("click", () => insertRow());
   cornerTools.append(transposeButton, addRowButton);
   corner.append(cornerTools);
@@ -807,7 +842,14 @@ function renderTable() {
     const th = document.createElement("th");
     th.draggable = true;
     th.className = "draggable-column";
-    th.title = "Drag to move column";
+    th.title = "Drag to move column. Focus and press Alt+Left or Alt+Right to move with the keyboard.";
+    th.scope = "col";
+    th.tabIndex = 0;
+    th.dataset.columnHandle = String(col);
+    th.setAttribute("aria-label", `Column ${col + 1}: ${headerName(col)}. Alt+Left or Alt+Right to move.`);
+    th.setAttribute("aria-keyshortcuts", "Alt+ArrowLeft Alt+ArrowRight");
+    th.setAttribute("aria-sort", state.sort?.column === col ? (state.sort.direction === "asc" ? "ascending" : "descending") : "none");
+    th.addEventListener("keydown", event => moveWithKeyboard(event, "column", col));
     th.addEventListener("dragstart", (event) => startDrag(event, "column", col));
     th.addEventListener("dragover", (event) => allowDrop(event, "column", col));
     th.addEventListener("dragleave", (event) => event.currentTarget.classList.remove("drag-over"));
@@ -835,6 +877,7 @@ function renderTable() {
     sort.className = `small-button icon-button sort-button ${state.sort?.column === col ? "active" : ""}`;
     sort.append(icon(state.sort?.column === col ? (state.sort.direction === "asc" ? "sortAsc" : "sortDesc") : "sort"));
     sort.title = "Sort by this column";
+    sort.setAttribute("aria-label", `Sort by ${headerName(col)}`);
     sort.addEventListener("click", () => {
       if (state.sort?.column !== col) {
         state.sort = { column: col, direction: "asc" };
@@ -852,6 +895,7 @@ function renderTable() {
     add.className = "small-button icon-button";
     add.append(icon("add"));
     add.title = "Insert column after";
+    add.setAttribute("aria-label", `Insert column after ${headerName(col)}`);
     add.addEventListener("click", () => insertColumn(col + 1));
 
     const del = document.createElement("button");
@@ -859,12 +903,28 @@ function renderTable() {
     del.className = "small-button icon-button danger";
     del.append(icon("close"));
     del.title = "Delete column";
+    del.setAttribute("aria-label", `Delete column ${headerName(col)}`);
     del.addEventListener("click", () => deleteColumn(col));
 
     const resizer = document.createElement("span");
     resizer.className = "col-resizer";
-    resizer.title = "Drag to resize column. Double-click to fit content.";
-    resizer.addEventListener("mousedown", (event) => resizeColumn(col, event));
+    resizer.title = "Drag to resize. Arrow keys resize; Enter or double-click fits content.";
+    resizer.tabIndex = 0;
+    resizer.dataset.resizeColumn = String(col);
+    resizer.setAttribute("role", "separator");
+    resizer.setAttribute("aria-orientation", "vertical");
+    resizer.setAttribute("aria-label", `Resize column ${headerName(col)}`);
+    resizer.setAttribute("aria-valuemin", "48");
+    resizer.setAttribute("aria-valuemax", "4000");
+    resizer.setAttribute("aria-valuenow", String(colWidth(col)));
+    resizer.addEventListener("pointerdown", event => resizeColumn(col, event));
+    resizer.addEventListener("keydown", event => {
+      if (!["ArrowLeft", "ArrowRight", "Enter"].includes(event.key)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === "Enter") autoSizeColumn(col);
+      else setColumnWidth(col, colWidth(col) + (event.key === "ArrowLeft" ? -1 : 1) * (event.shiftKey ? 50 : 10));
+    });
     resizer.addEventListener("dblclick", (event) => {
       event.preventDefault();
       autoSizeColumn(col);
@@ -886,10 +946,16 @@ function renderTable() {
     tr.style.height = `${rowHeight(item.index)}px`;
     const rowHead = document.createElement("th");
     rowHead.className = "row-number";
+    rowHead.scope = "row";
     rowHead.draggable = item.index > 0;
     if (item.index > 0) {
       rowHead.classList.add("draggable-row");
-      rowHead.title = "Drag to move row";
+      rowHead.title = "Drag to move row. Focus and press Alt+Up or Alt+Down to move with the keyboard.";
+      rowHead.tabIndex = 0;
+      rowHead.dataset.rowHandle = String(item.index);
+      rowHead.setAttribute("aria-label", `Row ${item.index + 1}. Alt+Up or Alt+Down to move.`);
+      rowHead.setAttribute("aria-keyshortcuts", "Alt+ArrowUp Alt+ArrowDown");
+      rowHead.addEventListener("keydown", event => moveWithKeyboard(event, "row", item.index));
       rowHead.addEventListener("dragstart", (event) => startDrag(event, "row", item.index));
       rowHead.addEventListener("dragover", (event) => allowDrop(event, "row", item.index));
       rowHead.addEventListener("dragleave", (event) => event.currentTarget.classList.remove("drag-over"));
@@ -906,12 +972,14 @@ function renderTable() {
     add.className = "small-button icon-button";
     add.append(icon("add"));
     add.title = "Insert row after";
+    add.setAttribute("aria-label", `Insert row after row ${item.index + 1}`);
     add.addEventListener("click", () => insertRow(item.index + 1));
     const del = document.createElement("button");
     del.type = "button";
     del.className = "small-button icon-button danger";
     del.append(icon("close"));
     del.title = "Delete row";
+    del.setAttribute("aria-label", `Delete row ${item.index + 1}`);
     del.addEventListener("click", () => deleteRow(item.index));
     const rowTools = document.createElement("div");
     rowTools.className = "cell-actions row-cell-actions";
@@ -925,6 +993,8 @@ function renderTable() {
       if (item.row.length !== columns) td.className = "cell-error";
       const input = document.createElement("textarea");
       input.value = item.row[col] ?? "";
+      input.dataset.cell = `${item.index}:${col}`;
+      input.setAttribute("aria-label", `Row ${item.index + 1}, ${headerName(col)}${item.index === 0 ? " (header)" : ""}`);
       let editing = false;
       input.addEventListener("input", () => {
         cancelImport();

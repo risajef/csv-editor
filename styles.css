@@ -575,3 +575,13 @@ th:hover .cell-actions,
     flex: 1;
   }
 }
+
+/* Keyboard and touch access for compact table controls. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.col-resizer { touch-action: none; }
+.col-resizer:focus-visible { background: rgba(20, 125, 115, 0.25); }
+.top-actions { flex-wrap: wrap; }

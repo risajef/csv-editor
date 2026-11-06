@@ -279,3 +279,21 @@ test('Markdown table cells export literal HTML and formatting punctuation', () =
   app.run(`state.rows=[['h'],[${JSON.stringify(cell)}]]`);
   assert.equal(app.run('currentViewMarkdown().split("\\n").length'), 3);
 });
+
+test('generated controls have names and keyboard movement and resize work', () => {
+  const app = harness();
+  app.run(String.raw`loadText('a,b\n1,2\n3,4');addFilter()`);
+  assert.match(app.run('els.filtersList.children[0].children[0].children[0]["aria-label"]'), /Enable filter/);
+  assert.match(app.run('els.filtersList.children[0].children[4]["aria-label"]'), /Delete filter/);
+  app.run(`state.filters=[];renderTable()`);
+  assert.match(app.run('els.tableWrap.children[0].children[2].children[1].children[1].children[0]["aria-label"]'), /Row 2, a/);
+  app.run(`var th=els.tableWrap.children[0].children[1].children[0].children[1];var resizer=th.children[1];els.tableWrap.querySelector=selector=>selector.includes("data-resize-column")?resizer:null;resizer.events.keydown({key:'ArrowRight',preventDefault(){},stopPropagation(){}})`);
+  assert.equal(app.run('colWidth(0)'), 170);
+  assert.equal(app.run('resizer["aria-valuenow"]'), '170');
+  assert.equal(app.run('th["aria-keyshortcuts"]'), 'Alt+ArrowLeft Alt+ArrowRight');
+  app.run(`th.events.keydown({key:'ArrowRight',altKey:true,target:th,currentTarget:th,preventDefault(){}})`);
+  assert.deepEqual(app.json('state.rows'), [['b','a'],['2','1'],['4','3']]);
+  app.run(`var rowHead=els.tableWrap.children[0].children[2].children[1].children[0];rowHead.events.keydown({key:'ArrowDown',altKey:true,target:rowHead,currentTarget:rowHead,preventDefault(){}})`);
+  assert.deepEqual(app.json('state.rows'), [['b','a'],['4','3'],['2','1']]);
+  assert.ok(app.run('history.past.length') >= 3);
+});

@@ -19,7 +19,7 @@ Run regression checks with `node --test --test-isolation=none tests/*.test.cjs`.
 - [x] Import sequencing and operation error reporting.
 - [x] Explicit spreadsheet-safe CSV export.
 - [x] Literal Markdown cell export.
-- [ ] Accessible cells, filters, resizing, and movement.
+- [x] Accessible cells, filters, resizing, and movement.
 - [ ] Standalone theme and usage documentation.
 - [ ] Architecture separation and final quality gate.
 
@@ -80,3 +80,7 @@ Added an opt-in “Spreadsheet text CSV” policy for CSV copy/download. Formula
 ### 14 — Export Markdown cells as literal text
 
 Encode user HTML and Markdown punctuation as character entities; only generated line breaks become `<br>`. Pipes cannot create columns, links/images cannot become active syntax, and existing entities remain literal source text. CRLF, CR and LF are handled consistently. Validation: 18 tests passed, including HTML, links, emphasis, code, pipes and entities.
+
+### 15 — Name generated controls and support keyboard/touch operations
+
+Cells, filter toggles, deletion actions and table controls have explicit accessible names. Column headers expose sort state and row/column headers support Alt+arrow movement with focus restored to the moved handle. Focusable column separators expose current/minimum/maximum widths, Arrow keys resize, Enter fits content, and pointer capture supports touch/pen/mouse dragging and cancellation. Added visible focus styling. Validation: 19 Node regressions passed, including keyboard movement, selected filter names and width updates. Headless Chromium now launches with the required sandbox exception; browser interaction QA follows before final sign-off.
