@@ -7,7 +7,7 @@ Run regression checks with `node --test --test-isolation=none tests/*.test.cjs`.
 ## Review checklist
 
 - [x] 1. Preserve incomplete CSV records; remove implicit repair.
-- [ ] 2. Preserve filter/sort references on column insertion.
+- [x] 2. Preserve filter/sort references on column insertion.
 - [ ] 3. Preserve positions in ragged rows during structural edits.
 - [ ] 4. Remove input-sized argument spreads from export and maxima.
 - [ ] 5. Bound rendering work and input size.
@@ -28,3 +28,7 @@ Run regression checks with `node --test --test-isolation=none tests/*.test.cjs`.
 ### 1 — Preserve imported record boundaries
 
 Removed automatic folding of short rows into a preceding cell. Length validation now sees the original records. Added a Node regression harness and checks for an incomplete data record and an incomplete first data record. Validation: `node --test --test-isolation=none tests/*.test.cjs` passed (1 test).
+
+### 2 — Keep column references aligned
+
+Centralized reference remapping for insertion, deletion, and movement. Existing filters and sorting now follow their original column when a preceding column is inserted. Regression covers insertion → deletion → movement and deletion of the referenced column. Validation: 2 tests passed.

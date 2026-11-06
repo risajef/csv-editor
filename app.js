@@ -392,14 +392,7 @@ function reorderColumn(fromIndex, targetIndex) {
     .map((index) => row[index]));
   state.colWidths = order.map((index) => state.colWidths[index] || 160);
 
-  const columnMap = new Map(order.map((oldIndex, newIndex) => [oldIndex, newIndex]));
-  state.filters = state.filters.map((filter) => ({
-    ...filter,
-    column: columnMap.get(filter.column) ?? filter.column,
-  }));
-  if (state.sort) {
-    state.sort = { ...state.sort, column: columnMap.get(state.sort.column) ?? state.sort.column };
-  }
+  remapColumnReferences(new Map(order.map((oldIndex, newIndex) => [oldIndex, newIndex])));
 
   recalculateAllRowHeights();
   state.rawText = toCsv(state.rows, state.separator);
@@ -824,8 +817,17 @@ function deleteRow(index) {
   render();
 }
 
+// Every structural edit updates references through the same mapping boundary.
+function remapColumnReferences(columnMap) {
+  state.filters = state.filters.filter(filter => columnMap.has(filter.column))
+    .map(filter => ({ ...filter, column: columnMap.get(filter.column) }));
+  state.sort = state.sort && columnMap.has(state.sort.column)
+    ? { ...state.sort, column: columnMap.get(state.sort.column) } : null;
+}
+
 function insertColumn(index = maxColumns()) {
   if (!state.rows.length) state.rows.push([]);
+  remapColumnReferences(new Map(Array.from({ length: maxColumns() }, (_, col) => [col, col >= index ? col + 1 : col])));
   state.rows.forEach((row) => row.splice(index, 0, ""));
   state.colWidths.splice(index, 0, 160);
   recalculateAllRowHeights();
@@ -834,13 +836,9 @@ function insertColumn(index = maxColumns()) {
 }
 
 function deleteColumn(index) {
+  remapColumnReferences(new Map(Array.from({ length: maxColumns() }, (_, col) => [col, col > index ? col - 1 : col]).filter(([col]) => col !== index)));
   state.rows.forEach((row) => row.splice(index, 1));
   state.colWidths.splice(index, 1);
-  state.filters = state.filters
-    .filter((filter) => filter.column !== index)
-    .map((filter) => ({ ...filter, column: filter.column > index ? filter.column - 1 : filter.column }));
-  if (state.sort?.column === index) state.sort = null;
-  if (state.sort?.column > index) state.sort.column -= 1;
   recalculateAllRowHeights();
   state.rawText = toCsv(state.rows, state.separator);
   render();
