@@ -284,6 +284,7 @@ function rowPassesFilters(row, rowIndex) {
     if (filter.operator === "not-empty") return value !== "";
     if (filter.operator === "regex") return !regexPending && !regexError && !!regexMatches.get(filter.id)?.has(rowIndex);
 
+    if (value.trim() === "" || String(needle).trim() === "") return false;
     const left = Number(value);
     const right = Number(needle);
     if (!Number.isFinite(left) || !Number.isFinite(right)) return false;
@@ -306,6 +307,11 @@ function viewRows() {
     data.sort((a, b) => {
       const av = a.row[state.sort.column] ?? "";
       const bv = b.row[state.sort.column] ?? "";
+      if (numeric) {
+        const aMissing = String(av).trim() === "";
+        const bMissing = String(bv).trim() === "";
+        if (aMissing !== bMissing) return aMissing ? 1 : -1;
+      }
       const result = numeric ? Number(av) - Number(bv) : String(av).localeCompare(String(bv), undefined, { numeric: true });
       return state.sort.direction === "asc" ? result : -result;
     });

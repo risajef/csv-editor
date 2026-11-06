@@ -159,3 +159,16 @@ test('XLSX rejects unsupported characters with a cell address and preserves text
   app.run(String.raw`state.rows=[['h'],['bad\u0001']];downloadXlsx()`);
   assert.match(app.run('els.operation.textContent'), /Cell A2/);
 });
+
+test('numeric comparisons skip missing operands and sort blanks last in either direction', () => {
+  const app = harness();
+  app.run(`state.filters=[{enabled:true,column:0,operator:'gt',value:'-1'}]`);
+  for (const value of ['', ' ', undefined, 'text']) assert.equal(app.run(`rowPassesFilters([${JSON.stringify(value)}])`), false);
+  assert.equal(app.run(`rowPassesFilters(['0'])`), true);
+  app.run(`state.filters[0].value=''`);
+  assert.equal(app.run(`rowPassesFilters(['1'])`), false);
+  app.run(`state.rows=[['n'],[''],['2'],['1']];state.filters=[];state.sort={column:0,direction:'asc'}`);
+  assert.deepEqual(app.json('viewDataRowsOnly()'), [['n'],['1'],['2'],['']]);
+  app.run(`state.sort.direction='desc'`);
+  assert.deepEqual(app.json('viewDataRowsOnly()'), [['n'],['2'],['1'],['']]);
+});

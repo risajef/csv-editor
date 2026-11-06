@@ -56,3 +56,7 @@ Moved matching into a disposable worker with a one-second termination deadline. 
 ### 8 — Validate worksheet text before export
 
 XLSX export rejects XML-illegal characters, unpaired surrogates, overlong cells and excessive sheet dimensions with an actionable cell address where applicable. It retains Unicode, whitespace and carriage returns, and escapes literal OpenXML `_xNNNN_` sequences. Download failures are shown without altering data. Regression covers rejected controls/surrogates, cell-length bounds, literal escape sequences and visible errors. Validation: 10 tests passed. Ordinary strings remain explicit XLSX text cells.
+
+### 9 — Distinguish missing numeric values from zero
+
+Numeric comparisons now skip blank, whitespace-only and nonnumeric operands. Blank thresholds do not become zero. Numeric sorting puts missing values last in both directions. Validation: 11 tests passed, including zero-versus-missing comparisons and ascending/descending blank placement.
