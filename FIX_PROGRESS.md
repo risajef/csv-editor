@@ -12,7 +12,7 @@ Run regression checks with `node --test --test-isolation=none tests/*.test.cjs`.
 - [x] 4. Remove input-sized argument spreads from export and maxima.
 - [x] 5. Bound rendering work and input size.
 - [x] 6. Diagnose CSV syntax and preserve empty records.
-- [ ] 7. Isolate regex evaluation with cancellation and errors.
+- [x] 7. Isolate regex evaluation with cancellation and errors.
 - [ ] 8. Produce valid worksheet XML or report unsupported content.
 - [ ] Numeric missing-value and operator semantics.
 - [ ] Undo, recovery, and explicit document state boundaries.
@@ -48,3 +48,7 @@ Hoisted dataset-width and layout calculations out of cell/row loops, reuse the r
 ### 6 — Parse CSV with explicit lexical states
 
 Extracted a pure CSV module shared by detection, import and serialization. Quoting errors carry character offsets and reject import without changing the current document. Empty quoted records and actual blank records survive; serializers quote a one-cell empty record for round trips. Delimiter detection samples complete logical records, including multiline fields; UTF-8 BOM is handled. Regression covers all offered delimiters, CRLF, quoted newlines/quotes, malformed quotes and empty records. Validation: 7 tests passed.
+
+### 7 — Cancel expensive regex matching
+
+Moved matching into a disposable worker with a one-second termination deadline. Patterns compile once per request; errors are visible. New input cancels prior jobs, stale completions cannot replace the current matches, and export is blocked while matching is pending or failed. Browsers without workers show an explicit unavailable message. Regression covers worker results, invalid syntax, cancellation, stale messages and deadline termination. Validation: 9 tests passed. Deadline lifecycle is tested with a controllable timer; real-browser worker execution remains part of final QA.

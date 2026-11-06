@@ -102,3 +102,47 @@ test('CSV lexer diagnoses malformed quoting and preserves explicit empty records
   assert.equal(app.run(String.raw`detectSeparator('a;b\n"x\n,y";z')`), ';');
   assert.deepEqual(app.json(String.raw`parseCsv('\uFEFFa;b\n"x;y";"a""b"',';')`), [['a','b'],['x;y','a"b']]);
 });
+
+test('regex matching is isolated, export waits, and stale workers are cancelled', () => {
+  const workers = [];
+  class Worker {
+    constructor() { workers.push(this); }
+    postMessage(data) { this.data = data; }
+    terminate() { this.terminated = true; }
+  }
+  const app = harness({ Worker, URL });
+  app.run(String.raw`document.baseURI='http://localhost/';loadText('v\nabc\nxyz');state.filters=[{id:'r',enabled:true,column:0,operator:'regex',value:'^a'}];renderTable()`);
+  assert.equal(workers.length, 1);
+  assert.throws(() => app.run('currentViewCsv()'), /Wait for regex/);
+  assert.equal(app.run('els.downloadView.disabled'), true);
+  workers[0].onmessage({data:{matches:[{id:'r',indices:[1]}]}});
+  assert.equal(app.run('currentViewCsv()'), 'v\nabc');
+  app.run(`setFilter('r',{value:'^x'})`);
+  assert.equal(workers[0].terminated, true);
+  workers[0].onmessage({data:{matches:[{id:'r',indices:[1]}]}});
+  assert.throws(() => app.run('currentViewCsv()'), /Wait for regex/);
+  workers[1].onmessage({data:{error:'Invalid regex: example'}});
+  assert.match(app.run('els.operation.textContent'), /Invalid regex/);
+  assert.throws(() => app.run('currentViewCsv()'), /Invalid regex/);
+  app.run(`setFilter('r',{enabled:false})`);
+  assert.equal(app.run('currentViewCsv()'), 'v\nabc\nxyz');
+});
+
+test('regex timeout terminates work and syntax failures are explicit', () => {
+  const workers = [], timers = [];
+  class Worker { constructor() { workers.push(this); } postMessage() {} terminate() { this.terminated = true; } }
+  const app = harness({ Worker, URL, setTimeout: callback => { timers.push(callback); return timers.length; }, clearTimeout() {} });
+  app.run(String.raw`document.baseURI='http://localhost/';loadText('v\nabc');state.filters=[{id:'r',enabled:true,column:0,operator:'regex',value:'^(a+)+$'}];renderTable()`);
+  timers.at(-1)();
+  assert.equal(workers[0].terminated, true);
+  assert.match(app.run('els.operation.textContent'), /1 second/);
+  assert.throws(() => app.run('currentViewCsv()'), /1 second/);
+  const vm = require('node:vm'), fs = require('node:fs'), path = require('node:path');
+  let response;
+  const self = { postMessage: value => { response = value; } };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../regex-worker.js'),'utf8'), { self });
+  self.onmessage({data:{filters:[{id:'r',pattern:'[',values:['abc']}]}});
+  assert.match(response.error, /Invalid regex/);
+  self.onmessage({data:{filters:[{id:'r',pattern:'^a',values:['abc','xyz']}]}});
+  assert.deepEqual(JSON.parse(JSON.stringify(response.matches)), [{id:'r',indices:[1]}]);
+});

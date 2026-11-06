@@ -10,6 +10,7 @@ const state = {
   rowHeights: [],
   heightUpdateQueued: false,
   drag: null,
+  regexRevision: 0,
   page: 0,
   visibleCount: 0,
 };
@@ -92,6 +93,7 @@ function loadText(text) {
       : state.separatorChoice === "tab" ? "\t" : state.separatorChoice;
     const rows = parseCsv(text, separator);
     assertDocumentSize(rows);
+    invalidateRegex();
     state.rawText = text;
     state.separator = separator;
     state.rows = rows;
@@ -214,7 +216,63 @@ function validationMessage() {
   return { text: `Length mismatch. Expected ${expected} columns; ${preview}.`, cls: "warn" };
 }
 
-function rowPassesFilters(row) {
+let regexJob = null;
+let regexKey = null;
+let regexMatches = new Map();
+let regexPending = false;
+let regexError = "";
+
+function invalidateRegex() {
+  state.regexRevision += 1;
+  cancelRegex();
+  regexKey = null;
+}
+
+function cancelRegex() {
+  if (regexJob) { clearTimeout(regexJob.timer); regexJob.worker.terminate(); regexJob = null; }
+  regexPending = false;
+}
+
+function prepareRegex() {
+  const filters = state.filters.filter(filter => filter.enabled && filter.operator === "regex");
+  const key = JSON.stringify([state.regexRevision, filters.map(({ id, column, value }) => [id, column, value])]);
+  if (key === regexKey) return;
+  cancelRegex();
+  regexKey = key;
+  regexMatches = new Map();
+  regexError = "";
+  if (!filters.length) return;
+  if (typeof Worker === "undefined") { regexError = "Regex filtering needs browser worker support."; showStatus(regexError, true); return; }
+  regexPending = true;
+  showStatus("Matching regex… exports will be available when matching completes.");
+  const finish = (message) => {
+    if (regexJob !== job) return;
+    cancelRegex();
+    regexError = message.error || "";
+    regexMatches = new Map((message.matches || []).map(result => [result.id, new Set(result.indices)]));
+    showStatus(regexError || "Regex matching complete.", !!regexError);
+    renderTable();
+    renderStats();
+  };
+  let job;
+  try {
+    const worker = new Worker(new URL("regex-worker.js", document.baseURI));
+    job = { worker, timer: null };
+    regexJob = job;
+    worker.onmessage = event => finish(event.data);
+    worker.onerror = () => finish({ error: "Regex worker failed. Change or disable the regex filter." });
+    job.timer = setTimeout(() => finish({ error: "Regex exceeded the 1 second limit. Change or disable the filter." }), 1000);
+    worker.postMessage({ filters: filters.map(filter => ({ id: filter.id, pattern: filter.value,
+      values: state.rows.slice(1).map(row => String(row[filter.column] ?? "")) })) });
+  } catch (error) {
+    if (job) cancelRegex();
+    regexPending = false;
+    regexError = `Regex worker unavailable: ${error.message}`;
+    showStatus(regexError, true);
+  }
+}
+
+function rowPassesFilters(row, rowIndex) {
   return state.filters.every((filter) => {
     if (!filter.enabled) return true;
     const value = String(row[filter.column] ?? "");
@@ -224,13 +282,7 @@ function rowPassesFilters(row) {
     if (filter.operator === "not-equals") return value !== needle;
     if (filter.operator === "empty") return value === "";
     if (filter.operator === "not-empty") return value !== "";
-    if (filter.operator === "regex") {
-      try {
-        return new RegExp(needle).test(value);
-      } catch {
-        return false;
-      }
-    }
+    if (filter.operator === "regex") return !regexPending && !regexError && !!regexMatches.get(filter.id)?.has(rowIndex);
 
     const left = Number(value);
     const right = Number(needle);
@@ -244,9 +296,10 @@ function rowPassesFilters(row) {
 }
 
 function viewRows() {
+  prepareRegex();
   const header = state.rows[0] ? [{ row: state.rows[0], index: 0, header: true }] : [];
   let data = state.rows.slice(1).map((row, offset) => ({ row, index: offset + 1 }));
-  data = data.filter((item) => rowPassesFilters(item.row));
+  data = data.filter((item) => rowPassesFilters(item.row, item.index));
 
   if (state.sort) {
     const numeric = isNumericColumn(state.sort.column);
@@ -262,7 +315,9 @@ function viewRows() {
 }
 
 function viewDataRowsOnly() {
-  return viewRows().map((item) => item.row);
+  const rows = viewRows();
+  if (regexPending || regexError) throw new Error(regexError || "Wait for regex matching to complete.");
+  return rows.map((item) => item.row);
 }
 
 function isInteractiveDragTarget(target) {
@@ -319,6 +374,7 @@ function reorderRow(fromIndex, targetIndex) {
   state.rows.splice(insertionIndex, 0, row);
   state.rowHeights.splice(insertionIndex, 0, height);
   state.sort = null;
+  invalidateRegex();
   state.rawText = toCsv(state.rows, state.separator);
   render();
 }
@@ -338,6 +394,7 @@ function reorderColumn(fromIndex, targetIndex) {
   remapColumnReferences(new Map(order.map((oldIndex, newIndex) => [oldIndex, newIndex])));
 
   recalculateAllRowHeights();
+  invalidateRegex();
   state.rawText = toCsv(state.rows, state.separator);
   render();
 }
@@ -346,7 +403,8 @@ function addFilter() {
   if (!state.rows.length) {
     state.rows = [["Column 1"], [""]];
     resetTableSizes();
-    state.rawText = toCsv(state.rows, state.separator);
+    invalidateRegex();
+  state.rawText = toCsv(state.rows, state.separator);
   }
 
   state.filters.push({
@@ -544,6 +602,7 @@ function recalculateRenderedRowHeights() {
 function renderTable() {
   els.tableWrap.innerHTML = "";
   state.visibleCount = 0;
+  prepareRegex();
   if (!state.rows.length) {
     els.pageInfo.textContent = "No data rows";
     els.previousPage.disabled = els.nextPage.disabled = true;
@@ -559,6 +618,7 @@ function renderTable() {
   const types = columnTypes(columns);
   const allRows = viewRows();
   state.visibleCount = Math.max(0, allRows.length - 1);
+  for (const control of [els.copyView, els.copyMarkdown, els.downloadView, els.downloadXlsx]) control.disabled = regexPending || !!regexError;
   const pageSize = Math.max(1, Math.min(100, Math.floor(2000 / Math.max(1, columns))));
   const pages = Math.max(1, Math.ceil(state.visibleCount / pageSize));
   state.page = Math.max(0, Math.min(state.page, pages - 1));
@@ -729,6 +789,7 @@ function renderTable() {
       input.addEventListener("input", () => {
         while (state.rows[item.index].length <= col) state.rows[item.index].push("");
         state.rows[item.index][col] = input.value;
+        invalidateRegex();
         state.rawText = null; // Serialize on demand, rather than on every keystroke.
         recalculateRowHeight(item.index);
         tr.style.height = `${rowHeight(item.index)}px`;
@@ -762,6 +823,7 @@ function insertRow(index = state.rows.length) {
   const row = Array.from({ length: width }, () => "");
   state.rows.splice(index, 0, row);
   recalculateAllRowHeights();
+  invalidateRegex();
   state.rawText = toCsv(state.rows, state.separator);
   render();
 }
@@ -769,6 +831,7 @@ function insertRow(index = state.rows.length) {
 function deleteRow(index) {
   state.rows.splice(index, 1);
   state.rowHeights.splice(index, 1);
+  invalidateRegex();
   state.rawText = toCsv(state.rows, state.separator);
   render();
 }
@@ -790,6 +853,7 @@ function insertColumn(index = maxColumns()) {
   });
   state.colWidths.splice(index, 0, 160);
   recalculateAllRowHeights();
+  invalidateRegex();
   state.rawText = toCsv(state.rows, state.separator);
   render();
 }
@@ -799,6 +863,7 @@ function deleteColumn(index) {
   state.rows.forEach((row) => row.splice(index, 1));
   state.colWidths.splice(index, 1);
   recalculateAllRowHeights();
+  invalidateRegex();
   state.rawText = toCsv(state.rows, state.separator);
   render();
 }
@@ -818,6 +883,7 @@ function transpose() {
   state.filters = [];
   state.sort = null;
   resetTableSizes();
+  invalidateRegex();
   state.rawText = toCsv(state.rows, state.separator);
   render();
 }
