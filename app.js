@@ -65,106 +65,12 @@ function icon(name) {
   return svg;
 }
 
-function detectSeparator(text) {
-  const candidates = [",", ";", "\t", "|"];
-  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== "").slice(0, 10);
-  let best = { sep: ",", score: -1 };
-
-  for (const sep of candidates) {
-    const counts = lines.map((line) => parseCsvLine(line, sep).length);
-    const nonSingle = counts.filter((count) => count > 1).length;
-    const consistency = counts.length ? counts.length - new Set(counts).size : 0;
-    const score = nonSingle * 10 + consistency;
-    if (score > best.score) best = { sep, score };
-  }
-
-  return best.sep;
-}
+const { parseCsv, detectSeparator, csvEscape, toCsv } = Csv;
 
 function activeSeparator() {
   if (state.separatorChoice === "tab") return "\t";
   if (state.separatorChoice === "auto") return detectSeparator(state.rawText);
   return state.separatorChoice;
-}
-
-function parseCsvLine(line, sep) {
-  const cells = [];
-  let cell = "";
-  let quoted = false;
-
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
-    const next = line[i + 1];
-
-    if (char === '"' && quoted && next === '"') {
-      cell += '"';
-      i += 1;
-    } else if (char === '"') {
-      quoted = !quoted;
-    } else if (char === sep && !quoted) {
-      cells.push(cell);
-      cell = "";
-    } else {
-      cell += char;
-    }
-  }
-
-  cells.push(cell);
-  return cells;
-}
-
-function parseCsv(text, sep) {
-  const rows = [];
-  let row = [];
-  let cell = "";
-  let quoted = false;
-
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i];
-    const next = text[i + 1];
-
-    if (char === '"' && quoted && next === '"') {
-      cell += '"';
-      i += 1;
-    } else if (char === '"') {
-      quoted = !quoted;
-    } else if (char === sep && !quoted) {
-      row.push(cell);
-      cell = "";
-    } else if ((char === "\n" || char === "\r") && !quoted) {
-      if (char === "\r" && next === "\n") i += 1;
-      row.push(cell);
-      rows.push(row);
-      row = [];
-      cell = "";
-    } else {
-      cell += char;
-    }
-  }
-
-  if (cell !== "" || row.length || text.endsWith(sep)) {
-    row.push(cell);
-    rows.push(row);
-  }
-
-  const parsed = rows.filter((cells, index, allRows) => {
-    const isTrailingEmpty = index === allRows.length - 1 && cells.length === 1 && cells[0] === "";
-    return !isTrailingEmpty;
-  });
-
-  return parsed;
-}
-
-function csvEscape(value, sep) {
-  const text = String(value ?? "");
-  if (text.includes('"') || text.includes("\n") || text.includes("\r") || text.includes(sep)) {
-    return `"${text.replaceAll('"', '""')}"`;
-  }
-  return text;
-}
-
-function toCsv(rows, sep) {
-  return rows.map((row) => row.map((cell) => csvEscape(cell, sep)).join(sep)).join("\n");
 }
 
 function showStatus(message, error = false) {
@@ -1146,14 +1052,10 @@ els.fileInput.addEventListener("change", () => {
   if (file) readFile(file);
 });
 els.separator.addEventListener("change", () => {
-  if (state.rawText === null) state.rawText = toCsv(state.rows, state.separator);
+  const previous = state.separatorChoice;
+  const text = state.rawText ?? toCsv(state.rows, state.separator);
   state.separatorChoice = els.separator.value;
-  state.separator = activeSeparator();
-  state.rows = parseCsv(state.rawText, state.separator);
-  state.filters = [];
-  state.sort = null;
-  resetTableSizes();
-  render();
+  if (!loadText(text)) { state.separatorChoice = previous; els.separator.value = previous; }
 });
 els.dropZone.addEventListener("dragover", (event) => {
   event.preventDefault();

@@ -80,3 +80,25 @@ test('oversized imports preserve the current document and show a useful error', 
   assert.equal(app.run(`loadText(Array(502).fill('x').join(','))`), false);
   assert.match(app.run('els.operation.textContent'), /500 columns/);
 });
+
+test('CSV lexer diagnoses malformed quoting and preserves explicit empty records', () => {
+  const app = harness();
+  for (const [input, expected] of [
+    ['h\n""', [['h'],['']]], ['h\n\n', [['h'],['']]], ['', []], ['\n', [['']]],
+    ['a,b\r\n1,"a\r\nb"\r\n', [['a','b'],['1','a\r\nb']]],
+  ]) {
+    assert.deepEqual(app.json(`parseCsv(${JSON.stringify(input)}, ',')`), expected);
+  }
+  for (const invalid of ['a,b\n1,"two', 'a,b\n1,ab"c', 'a,b\n1,"x"junk']) {
+    assert.throws(() => app.run(`parseCsv(${JSON.stringify(invalid)}, ',')`), /character/);
+    app.run(`loadText('original')`);
+    assert.equal(app.run(`loadText(${JSON.stringify(invalid)})`), false);
+    assert.deepEqual(app.json('state.rows'), [['original']]);
+  }
+  for (const separator of [',',';','\t','|']) {
+    const rows = [['a','b'],['x\ny','"quoted"'],['',''],['']];
+    assert.deepEqual(app.json(`parseCsv(toCsv(${JSON.stringify(rows)},${JSON.stringify(separator)}),${JSON.stringify(separator)})`), rows);
+  }
+  assert.equal(app.run(String.raw`detectSeparator('a;b\n"x\n,y";z')`), ';');
+  assert.deepEqual(app.json(String.raw`parseCsv('\uFEFFa;b\n"x;y";"a""b"',';')`), [['a','b'],['x;y','a"b']]);
+});

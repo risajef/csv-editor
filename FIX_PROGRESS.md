@@ -11,7 +11,7 @@ Run regression checks with `node --test --test-isolation=none tests/*.test.cjs`.
 - [x] 3. Preserve positions in ragged rows during structural edits.
 - [x] 4. Remove input-sized argument spreads from export and maxima.
 - [x] 5. Bound rendering work and input size.
-- [ ] 6. Diagnose CSV syntax and preserve empty records.
+- [x] 6. Diagnose CSV syntax and preserve empty records.
 - [ ] 7. Isolate regex evaluation with cancellation and errors.
 - [ ] 8. Produce valid worksheet XML or report unsupported content.
 - [ ] Numeric missing-value and operator semantics.
@@ -44,3 +44,7 @@ Replaced per-byte number accumulation and unbounded `push(...data)` with typed-a
 ### 5 — Bound rendering and import work
 
 Hoisted dataset-width and layout calculations out of cell/row loops, reuse the rendered match count for statistics, and defer serialization while a cell is being typed. Pagination renders at most 100 data rows and approximately 2,000 data cells; exports retain the complete filtered/sorted view. Imports are checked before replacing state: 5 MiB text/files, 50,000 rows, 500 columns, and 1,000,000 rectangular cells. Regression verifies linear width scans, page boundaries, full-view exports and rejected imports retaining the old document. Validation: 6 tests passed. Parsing remains synchronous within the explicit text budget; regex isolation is the next dedicated fix.
+
+### 6 — Parse CSV with explicit lexical states
+
+Extracted a pure CSV module shared by detection, import and serialization. Quoting errors carry character offsets and reject import without changing the current document. Empty quoted records and actual blank records survive; serializers quote a one-cell empty record for round trips. Delimiter detection samples complete logical records, including multiline fields; UTF-8 BOM is handled. Regression covers all offered delimiters, CRLF, quoted newlines/quotes, malformed quotes and empty records. Validation: 7 tests passed.
