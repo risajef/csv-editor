@@ -24,6 +24,10 @@ const root = path.resolve(__dirname, '..');
     browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     const page = await browser.newPage();
     const errors = [];
+    const assetFailures = [];
+    page.on("response", response => {
+      if (response.status() >= 400 && ["document", "script", "stylesheet"].includes(response.request().resourceType())) assetFailures.push(response.url());
+    });
     page.on('pageerror', error => errors.push(error.message));
     page.on('dialog', dialog => dialog.accept());
     const url = `http://127.0.0.1:${server.address().port}/`;
@@ -74,6 +78,7 @@ const root = path.resolve(__dirname, '..');
     await page.evaluate(() => setFilter('regex', {enabled:false}));
     assert.equal(await page.$eval('#download-view', element => element.disabled), false);
     assert.deepEqual(errors, []);
+    assert.deepEqual(assetFailures, [], "Standalone app assets must load without the parent site.");
     console.log(`Browser smoke passed: edit/click, Tab focus, keyboard move/resize, undo, regex results/errors/timeout (${await browser.version()}).`);
   } finally {
     if (browser) await browser.close();

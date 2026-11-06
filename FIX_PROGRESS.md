@@ -20,7 +20,7 @@ Run regression checks with `node --test --test-isolation=none tests/*.test.cjs`.
 - [x] Explicit spreadsheet-safe CSV export.
 - [x] Literal Markdown cell export.
 - [x] Accessible cells, filters, resizing, and movement.
-- [ ] Standalone theme and usage documentation.
+- [x] Standalone theme and usage documentation.
 - [ ] Architecture separation and final quality gate.
 
 ## Completed fixes
@@ -88,3 +88,7 @@ Cells, filter toggles, deletion actions and table controls have explicit accessi
 ### 16 — Preserve actions and focus when leaving edited cells
 
 Real Chromium testing exposed table reconstruction between pointerdown and click: edit-then-delete lost the delete action, while Tab navigation dropped focus onto the body. Edit refresh now waits until native focus navigation or the complete pointer click, then restores matching cell/filter focus and text selection. Added a reusable local browser smoke suite covering the exact failures, keyboard movement/resizing, undo and real regex-worker results, invalid patterns and one-second termination. Validation: 19 Node tests and the Chromium smoke suite passed (Chrome 131.0.6778.204). This is an additional defect confirmed during browser QA, committed independently of the accessibility changes.
+
+### 17 — Make the checkout independently runnable
+
+Removed the stylesheet request outside the subrepo. Existing local CSS defaults now supply the theme without a parent checkout. Added standalone serving instructions, data/shape policies, limits, recovery behavior, keyboard/pointer operations, export tradeoffs and test commands. Asset regression checks ensure referenced files ship locally and load before the controller. Validation: 20 Node tests and the Chromium smoke suite passed with no document/script/stylesheet HTTP failures. No parent staging, build or site files were changed.
