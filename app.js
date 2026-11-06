@@ -1057,10 +1057,10 @@ function currentViewCsv() {
 }
 
 function markdownCell(value) {
+  // Entities keep user punctuation literal; only our generated line breaks are HTML.
   return String(value ?? "")
-    .replaceAll("\\", "\\\\")
-    .replaceAll("|", "\\|")
-    .replace(/\r?\n/g, "<br>");
+    .replace(/[&<>\\"'|`*_{}\[\]()#+.!~=\-]/g, char => `&#${char.codePointAt(0)};`)
+    .replace(/\r\n|\r|\n/g, "<br>");
 }
 
 function currentViewMarkdown() {

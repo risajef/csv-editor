@@ -267,3 +267,15 @@ test('spreadsheet-text CSV is opt-in and never changes the document', () => {
   app.run('els.spreadsheetText.checked=false');
   assert.deepEqual(app.json(`parseCsv(currentViewCsv(),',')`), original);
 });
+
+test('Markdown table cells export literal HTML and formatting punctuation', () => {
+  const app = harness();
+  const cell = '<img src=x onerror=alert(1)> **bold** [link](javascript:x) `code` | &lt;';
+  const escaped = app.run(`markdownCell(${JSON.stringify(cell)})`);
+  assert.ok(!escaped.includes('<img') && !escaped.includes('**') && !escaped.includes('[link]') && !escaped.includes('|'));
+  assert.match(escaped, /&#60;img/);
+  assert.match(escaped, /&#38;lt;/);
+  assert.equal(app.run(String.raw`markdownCell('a\r\nb\rc\nd')`), 'a<br>b<br>c<br>d');
+  app.run(`state.rows=[['h'],[${JSON.stringify(cell)}]]`);
+  assert.equal(app.run('currentViewMarkdown().split("\\n").length'), 3);
+});

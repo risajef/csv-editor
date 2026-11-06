@@ -18,7 +18,7 @@ Run regression checks with `node --test --test-isolation=none tests/*.test.cjs`.
 - [x] Undo, recovery, and explicit document state boundaries.
 - [x] Import sequencing and operation error reporting.
 - [x] Explicit spreadsheet-safe CSV export.
-- [ ] Literal Markdown cell export.
+- [x] Literal Markdown cell export.
 - [ ] Accessible cells, filters, resizing, and movement.
 - [ ] Standalone theme and usage documentation.
 - [ ] Architecture separation and final quality gate.
@@ -76,3 +76,7 @@ A new import, paste, undo or document edit cancels pending file reads; obsolete 
 ### 13 — Make spreadsheet-oriented CSV export explicit
 
 Added an opt-in “Spreadsheet text CSV” policy for CSV copy/download. Formula-like cells receive a quoted tab prefix, including whitespace-prefixed and full-width formula starters. Ordinary CSV remains lossless, editor data is untouched, and transformed downloads do not clear the unsaved-document guard. XLSX remains explicit string-cell export. This policy changes exported values and is not a universal guarantee across spreadsheet applications or save/reopen cycles; documentation will state that boundary. Validation: 17 tests passed.
+
+### 14 — Export Markdown cells as literal text
+
+Encode user HTML and Markdown punctuation as character entities; only generated line breaks become `<br>`. Pipes cannot create columns, links/images cannot become active syntax, and existing entities remain literal source text. CRLF, CR and LF are handled consistently. Validation: 18 tests passed, including HTML, links, emphasis, code, pipes and entities.
