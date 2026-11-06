@@ -92,3 +92,7 @@ Real Chromium testing exposed table reconstruction between pointerdown and click
 ### 17 — Make the checkout independently runnable
 
 Removed the stylesheet request outside the subrepo. Existing local CSS defaults now supply the theme without a parent checkout. Added standalone serving instructions, data/shape policies, limits, recovery behavior, keyboard/pointer operations, export tradeoffs and test commands. Asset regression checks ensure referenced files ship locally and load before the controller. Validation: 20 Node tests and the Chromium smoke suite passed with no document/script/stylesheet HTTP failures. No parent staging, build or site files were changed.
+
+### 18 — Separate document behavior from browser adapters
+
+Extracted structural commands/reference remapping into `document.js`, projections/type inference/validation into `view.js`, and Markdown/XLSX serializers into `export.js`. `app.js` owns transaction validation/history and browser APIs; pure services receive their data explicitly and do not read controller state or DOM globals. Removed the redundant serialized-text mirror; original import text and current rows have distinct roles. Added DOM-free end-to-end service tests and history-budget checks. Validation: 22 Node tests and the Chromium smoke suite passed after extraction. Final independent workbook and broader interaction checks remain below.

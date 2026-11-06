@@ -14,5 +14,6 @@ test('standalone HTML uses only shipped local assets in dependency order', () =>
   const scripts = [...html.matchAll(/<script src="([^"]+)"/g)].map(match => match[1]);
   assert.ok(scripts.indexOf('csv.js') < scripts.indexOf('app.js'));
   assert.ok(scripts.indexOf('document.js') < scripts.indexOf('app.js'));
+  for (const file of ['view.js', 'export.js']) assert.ok(scripts.indexOf(file) >= 0 && scripts.indexOf(file) < scripts.indexOf('app.js'));
   assert.ok(fs.existsSync(path.join(root,'regex-worker.js')));
 });

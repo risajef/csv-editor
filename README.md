@@ -67,3 +67,14 @@ node tests/browser-smoke.cjs
 ```
 
 It starts a temporary loopback server, launches headless Chromium and cleans up both. It checks native focus/click interactions and worker matching/cancellation. It needs an environment that permits Chromium and loopback sockets. See [FIX_PROGRESS.md](FIX_PROGRESS.md) for completed fixes and verification details. The review's original requirements discussion remains in [requirements.md](requirements.md).
+
+## Code boundaries
+
+- `csv.js`: CSV lexer, delimiter sampling and CSV output policies.
+- `document.js`: DOM-free structural commands, column-reference remapping and bounded history.
+- `view.js`: DOM-free validation, numeric inference and filtered/sorted projections. Regex match sets are explicit inputs.
+- `export.js`: DOM-free Markdown and XLSX/ZIP serializers.
+- `regex-worker.js`: disposable regex evaluation.
+- `app.js`: browser event lifecycle, transactional edits/recovery, worker coordination, pagination and DOM layout. It validates document limits and records history around document commands.
+
+These are ordinary dependency-ordered browser scripts with one namespace per service, so the app remains buildless. Pure services can run under Node without document/window/clipboard/filesystem shims. No generated bundle or external runtime package is shipped.

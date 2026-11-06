@@ -1,6 +1,5 @@
 const LIMITS = Object.freeze({ text: 5 * 1024 * 1024, rows: 50000, columns: 500, cells: 1000000 });
 const state = {
-  rawText: "",
   sourceText: "",
   edited: false,
   dirty: false,
@@ -27,7 +26,7 @@ let operationRevision = 0;
 let pointerActive = false;
 let editRefreshPending = false;
 const DRAFT_KEY = "ideo-csv-draft-v1";
-const DOCUMENT_FIELDS = ["rows", "filters", "sort", "colWidths", "separator", "separatorChoice", "rawText", "sourceText", "edited", "dirty", "page", "textLength"];
+const DOCUMENT_FIELDS = ["rows", "filters", "sort", "colWidths", "separator", "separatorChoice", "sourceText", "edited", "dirty", "page", "textLength"];
 const els = {
   spreadsheetText: document.querySelector("#spreadsheet-text"),
   undo: document.querySelector("#undo"),
@@ -86,12 +85,6 @@ function icon(name) {
 }
 
 const { parseCsv, detectSeparator, csvEscape, toCsv } = Csv;
-
-function activeSeparator() {
-  if (state.separatorChoice === "tab") return "\t";
-  if (state.separatorChoice === "auto") return detectSeparator(state.rawText);
-  return state.separatorChoice;
-}
 
 function showStatus(message, error = false) {
   operationRevision += 1;
@@ -191,7 +184,6 @@ function editDocument(mutate) {
     state.textLength = state.rows.reduce((sum, row) => sum + row.reduce((n, cell) => n + cell.length, 0), 0);
     if (state.textLength > LIMITS.text) throw new Error("Document text limit: 5 MiB.");
     history.remember(before);
-    state.rawText = null;
     state.edited = true;
     state.dirty = true;
     invalidateRegex();
@@ -217,7 +209,6 @@ function loadText(text, choice = state.separatorChoice) {
     assertDocumentSize(rows);
     history.remember(captureDocument());
     invalidateRegex();
-    state.rawText = text;
     state.sourceText = text;
     state.edited = false;
     state.dirty = true;
@@ -248,7 +239,7 @@ function resetTableSizes() {
 }
 
 function maxColumns() {
-  return state.rows.reduce((width, row) => Math.max(width, row.length), 0);
+  return DocumentModel.maxColumns(state.rows);
 }
 
 function colWidth(index) {
@@ -321,30 +312,9 @@ function headerName(index) {
   return value || `Column ${index + 1}`;
 }
 
-function isNumericColumn(index) {
-  const values = state.rows.slice(1).map((row) => row[index]).filter((value) => String(value ?? "").trim() !== "");
-  return values.length > 0 && values.every((value) => Number.isFinite(Number(value)));
-}
-
-function columnTypes(columns = maxColumns()) {
-  return Array.from({ length: columns }, (_, index) => isNumericColumn(index));
-}
-
-function validationMessage() {
-  if (!state.rows.length) return { text: "No CSV loaded.", cls: "" };
-  const lengths = state.rows.map((row) => row.length);
-  const expected = lengths[0];
-  const bad = lengths
-    .map((length, index) => ({ length, index }))
-    .filter((item) => item.length !== expected);
-
-  if (!bad.length) {
-    return { text: `Valid CSV: all ${state.rows.length} rows have ${expected} columns.`, cls: "ok" };
-  }
-
-  const preview = bad.slice(0, 4).map((item) => `row ${item.index + 1}: ${item.length}`).join(", ");
-  return { text: `Length mismatch. Expected ${expected} columns; ${preview}.`, cls: "warn" };
-}
+function isNumericColumn(index) { return TableView.isNumericColumn(state.rows, index); }
+function columnTypes(columns = maxColumns()) { return TableView.columnTypes(state.rows, columns); }
+function validationMessage() { return TableView.validationMessage(state.rows); }
 
 let regexJob = null;
 let regexKey = null;
@@ -403,51 +373,12 @@ function prepareRegex() {
 }
 
 function rowPassesFilters(row, rowIndex) {
-  return state.filters.every((filter) => {
-    if (!filter.enabled) return true;
-    const value = String(row[filter.column] ?? "");
-    const needle = filter.value;
-
-    if (filter.operator === "equals") return value === needle;
-    if (filter.operator === "not-equals") return value !== needle;
-    if (filter.operator === "empty") return value === "";
-    if (filter.operator === "not-empty") return value !== "";
-    if (filter.operator === "regex") return !regexPending && !regexError && !!regexMatches.get(filter.id)?.has(rowIndex);
-
-    if (value.trim() === "" || String(needle).trim() === "") return false;
-    const left = Number(value);
-    const right = Number(needle);
-    if (!Number.isFinite(left) || !Number.isFinite(right)) return false;
-    if (filter.operator === "gt") return left > right;
-    if (filter.operator === "gte") return left >= right;
-    if (filter.operator === "lt") return left < right;
-    if (filter.operator === "lte") return left <= right;
-    return true;
-  });
+  return TableView.rowPassesFilters(row, state.filters, rowIndex, regexMatches, !regexPending && !regexError);
 }
 
 function viewRows() {
   prepareRegex();
-  const header = state.rows[0] ? [{ row: state.rows[0], index: 0, header: true }] : [];
-  let data = state.rows.slice(1).map((row, offset) => ({ row, index: offset + 1 }));
-  data = data.filter((item) => rowPassesFilters(item.row, item.index));
-
-  if (state.sort) {
-    const numeric = isNumericColumn(state.sort.column);
-    data.sort((a, b) => {
-      const av = a.row[state.sort.column] ?? "";
-      const bv = b.row[state.sort.column] ?? "";
-      if (numeric) {
-        const aMissing = String(av).trim() === "";
-        const bMissing = String(bv).trim() === "";
-        if (aMissing !== bMissing) return aMissing ? 1 : -1;
-      }
-      const result = numeric ? Number(av) - Number(bv) : String(av).localeCompare(String(bv), undefined, { numeric: true });
-      return state.sort.direction === "asc" ? result : -result;
-    });
-  }
-
-  return header.concat(data);
+  return TableView.viewRows(state.rows, state.filters, state.sort, regexMatches, !regexPending && !regexError);
 }
 
 function viewDataRowsOnly() {
@@ -503,40 +434,12 @@ function dropItem(event, type, index) {
 
 function reorderRow(fromIndex, targetIndex) {
   if (fromIndex === 0 || targetIndex === 0 || fromIndex === targetIndex) return;
-  return editDocument(() => {
-
-  const [row] = state.rows.splice(fromIndex, 1);
-  const [height] = state.rowHeights.splice(fromIndex, 1);
-  const insertionIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex;
-  state.rows.splice(insertionIndex, 0, row);
-  state.rowHeights.splice(insertionIndex, 0, height);
-  state.sort = null;
-
-
-
-  });
+  return editDocument(() => DocumentModel.reorderRow(state, fromIndex, targetIndex));
 }
 
 function reorderColumn(fromIndex, targetIndex) {
   if (fromIndex === targetIndex) return;
-  return editDocument(() => {
-
-  const order = Array.from({ length: maxColumns() }, (_, index) => index);
-  const [moved] = order.splice(fromIndex, 1);
-  const insertionIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex;
-  order.splice(insertionIndex, 0, moved);
-
-  // A permutation must retain missing positions rather than collapse them.
-  state.rows = state.rows.map(row => order.map(index => row[index] ?? ""));
-  state.colWidths = order.map((index) => state.colWidths[index] || 160);
-
-  remapColumnReferences(new Map(order.map((oldIndex, newIndex) => [oldIndex, newIndex])));
-
-
-
-
-
-  });
+  return editDocument(() => DocumentModel.reorderColumn(state, fromIndex, targetIndex));
 }
 
 function addFilter() {
@@ -1019,7 +922,6 @@ function renderTable() {
         while (state.rows[item.index].length <= col) state.rows[item.index].push("");
         state.rows[item.index][col] = input.value;
         invalidateRegex();
-        state.rawText = null; // Serialize on demand, rather than on every keystroke.
         recalculateRowHeight(item.index);
         tr.style.height = `${rowHeight(item.index)}px`;
       });
@@ -1066,111 +968,32 @@ function render() {
 }
 
 function insertRow(index = state.rows.length) {
-  return editDocument(() => {
-  const width = Math.max(1, maxColumns());
-  const row = Array.from({ length: width }, () => "");
-  state.rows.splice(index, 0, row);
-
-
-
-
-
-  });
+  return editDocument(() => DocumentModel.insertRow(state, index));
 }
 
 function deleteRow(index) {
-  return editDocument(() => {
-  state.rows.splice(index, 1);
-  state.rowHeights.splice(index, 1);
-
-
-
-
-  });
+  return editDocument(() => DocumentModel.deleteRow(state, index));
 }
 
-// Every structural edit updates references through the same mapping boundary.
-function remapColumnReferences(columnMap) {
-  state.filters = state.filters.filter(filter => columnMap.has(filter.column))
-    .map(filter => ({ ...filter, column: columnMap.get(filter.column) }));
-  state.sort = state.sort && columnMap.has(state.sort.column)
-    ? { ...state.sort, column: columnMap.get(state.sort.column) } : null;
-}
 
 function insertColumn(index = maxColumns()) {
-  return editDocument(() => {
-  if (!state.rows.length) state.rows.push([]);
-  remapColumnReferences(new Map(Array.from({ length: maxColumns() }, (_, col) => [col, col >= index ? col + 1 : col])));
-  state.rows.forEach(row => {
-    while (row.length < index) row.push("");
-    row.splice(index, 0, "");
-  });
-  state.colWidths.splice(index, 0, 160);
-
-
-
-
-
-  });
+  return editDocument(() => DocumentModel.insertColumn(state, index));
 }
 
 function deleteColumn(index) {
-  return editDocument(() => {
-  remapColumnReferences(new Map(Array.from({ length: maxColumns() }, (_, col) => [col, col > index ? col - 1 : col]).filter(([col]) => col !== index)));
-  state.rows.forEach((row) => row.splice(index, 1));
-  state.colWidths.splice(index, 1);
-
-
-
-
-
-  });
+  return editDocument(() => DocumentModel.deleteColumn(state, index));
 }
 
 function transpose() {
-  return editDocument(() => {
-  const width = maxColumns();
-  const height = state.rows.length;
-  const next = [];
-  for (let col = 0; col < width; col += 1) {
-    const row = [];
-    for (let rowIndex = 0; rowIndex < height; rowIndex += 1) {
-      row.push(state.rows[rowIndex]?.[col] ?? "");
-    }
-    next.push(row);
-  }
-  state.rows = next;
-  state.filters = [];
-  state.sort = null;
-  state.colWidths = Array.from({ length: maxColumns() }, () => 160);
-
-
-
-
-  });
+  return editDocument(() => DocumentModel.transpose(state));
 }
 
 function currentViewCsv() {
   return (els.spreadsheetText.checked ? Csv.toSpreadsheetCsv : toCsv)(viewDataRowsOnly(), state.separator);
 }
 
-function markdownCell(value) {
-  // Entities keep user punctuation literal; only our generated line breaks are HTML.
-  return String(value ?? "")
-    .replace(/[&<>\\"'|`*_{}\[\]()#+.!~=\-]/g, char => `&#${char.codePointAt(0)};`)
-    .replace(/\r\n|\r|\n/g, "<br>");
-}
-
-function currentViewMarkdown() {
-  const rows = viewDataRowsOnly();
-  if (!rows.length) return "";
-  const width = rows.reduce((max, row) => Math.max(max, row.length), 0);
-  const normalized = rows.map((row) => Array.from({ length: width }, (_, index) => markdownCell(row[index])));
-  const header = normalized[0];
-  const separator = Array.from({ length: width }, () => "---");
-  const body = normalized.slice(1);
-  return [header, separator, ...body].map((row) => `| ${row.join(" | ")} |`).join("\n");
-}
+const { markdownCell, xmlEscape, columnName, worksheetXml, crc32, createZip, createXlsx } = TableExport;
+function currentViewMarkdown() { return TableExport.toMarkdown(viewDataRowsOnly()); }
 
 function downloadView() {
   return runOperation("CSV download prepared.", () => {
@@ -1198,163 +1021,6 @@ async function copyText(text) {
 
 function copyView() { return runOperation("CSV copied.", () => copyText(currentViewCsv())); }
 function copyMarkdown() { return runOperation("Markdown copied.", () => copyText(currentViewMarkdown())); }
-
-function xmlEscape(value) {
-  const text = String(value ?? "");
-  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF\uD800-\uDFFF]/u.test(text)) {
-    throw new Error("contains a character unsupported by XML; remove it or export CSV instead.");
-  }
-  if (text.length > 32767) throw new Error("exceeds the XLSX limit of 32,767 characters per cell; export CSV instead.");
-  return text
-    .replace(/_x[0-9a-fA-F]{4}_/g, match => `_x005F_${match.slice(1)}`)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("\r", "&#13;");
-}
-
-function columnName(index) {
-  let name = "";
-  let number = index + 1;
-  while (number > 0) {
-    number -= 1;
-    name = String.fromCharCode(65 + (number % 26)) + name;
-    number = Math.floor(number / 26);
-  }
-  return name;
-}
-
-function worksheetXml(rows) {
-  if (rows.length > 1048576 || rows.some(row => row.length > 16384)) throw new Error("XLSX sheet dimensions exceeded; export CSV instead.");
-  const sheetData = rows
-    .map((row, rowIndex) => {
-      const cells = row
-        .map((value, colIndex) => {
-          const ref = `${columnName(colIndex)}${rowIndex + 1}`;
-          let text;
-          try { text = xmlEscape(value); } catch (error) { throw new Error(`Cell ${ref} ${error.message}`); }
-          return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${text}</t></is></c>`;
-        })
-        .join("");
-      return `<row r="${rowIndex + 1}">${cells}</row>`;
-    })
-    .join("");
-
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <sheetData>${sheetData}</sheetData>
-</worksheet>`;
-}
-
-function crc32(bytes) {
-  let crc = -1;
-  for (const byte of bytes) {
-    crc ^= byte;
-    for (let bit = 0; bit < 8; bit += 1) {
-      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
-    }
-  }
-  return (crc ^ -1) >>> 0;
-}
-
-function writeUint16(bytes, value) {
-  bytes.push(value & 255, (value >>> 8) & 255);
-}
-
-function writeUint32(bytes, value) {
-  bytes.push(value & 255, (value >>> 8) & 255, (value >>> 16) & 255, (value >>> 24) & 255);
-}
-
-function createZip(files) {
-  const encoder = new TextEncoder();
-  const chunks = [];
-  const central = [];
-  let offset = 0;
-  const append = bytes => { chunks.push(bytes); offset += bytes.length; };
-  if (files.length > 65535) throw new Error("Too many ZIP entries.");
-  for (const file of files) {
-    const name = encoder.encode(file.name);
-    const data = encoder.encode(file.content);
-    if (name.length > 65535 || data.length > 0xffffffff) throw new Error("ZIP entry is too large.");
-    const crc = crc32(data);
-    const entryOffset = offset;
-    const header = [];
-    writeUint32(header, 0x04034b50);
-    for (const value of [20, 0, 0, 0, 0]) writeUint16(header, value);
-    for (const value of [crc, data.length, data.length]) writeUint32(header, value);
-    writeUint16(header, name.length);
-    writeUint16(header, 0);
-    append(new Uint8Array(header));
-    append(name);
-    append(data);
-    central.push({ name, length: data.length, crc, offset: entryOffset });
-  }
-  const centralStart = offset;
-  for (const entry of central) {
-    const header = [];
-    writeUint32(header, 0x02014b50);
-    for (const value of [20, 20, 0, 0, 0, 0]) writeUint16(header, value);
-    for (const value of [entry.crc, entry.length, entry.length]) writeUint32(header, value);
-    for (const value of [entry.name.length, 0, 0, 0, 0]) writeUint16(header, value);
-    writeUint32(header, 0);
-    writeUint32(header, entry.offset);
-    append(new Uint8Array(header));
-    append(entry.name);
-  }
-  const footer = [];
-  writeUint32(footer, 0x06054b50);
-  for (const value of [0, 0, central.length, central.length]) writeUint16(footer, value);
-  writeUint32(footer, offset - centralStart);
-  writeUint32(footer, centralStart);
-  writeUint16(footer, 0);
-  append(new Uint8Array(footer));
-  if (offset > 0xffffffff) throw new Error("ZIP64 archives are not supported.");
-  const result = new Uint8Array(offset);
-  let position = 0;
-  for (const chunk of chunks) { result.set(chunk, position); position += chunk.length; }
-  return result;
-}
-
-function createXlsx(rows) {
-  return createZip([
-    {
-      name: "[Content_Types].xml",
-      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-</Types>`,
-    },
-    {
-      name: "_rels/.rels",
-      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
-</Relationships>`,
-    },
-    {
-      name: "xl/workbook.xml",
-      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <sheets><sheet name="CSV" sheetId="1" r:id="rId1"/></sheets>
-</workbook>`,
-    },
-    {
-      name: "xl/_rels/workbook.xml.rels",
-      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-</Relationships>`,
-    },
-    {
-      name: "xl/worksheets/sheet1.xml",
-      content: worksheetXml(rows),
-    },
-  ]);
-}
 
 function downloadXlsx() {
   return runOperation("XLSX download prepared.", () => {
