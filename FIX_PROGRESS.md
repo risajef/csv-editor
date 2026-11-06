@@ -9,7 +9,7 @@ Run regression checks with `node --test --test-isolation=none tests/*.test.cjs`.
 - [x] 1. Preserve incomplete CSV records; remove implicit repair.
 - [x] 2. Preserve filter/sort references on column insertion.
 - [x] 3. Preserve positions in ragged rows during structural edits.
-- [ ] 4. Remove input-sized argument spreads from export and maxima.
+- [x] 4. Remove input-sized argument spreads from export and maxima.
 - [ ] 5. Bound rendering work and input size.
 - [ ] 6. Diagnose CSV syntax and preserve empty records.
 - [ ] 7. Isolate regex evaluation with cancellation and errors.
@@ -36,3 +36,7 @@ Centralized reference remapping for insertion, deletion, and movement. Existing 
 ### 3 — Preserve missing-cell positions
 
 Column permutations now materialize absent cells as empty strings; insertion pads only up to its target position. Imported ragged rows remain intact until an explicit structural operation needs those positions. Deletion and transpose retain positional meaning. Regression exercises movement, insertion, deletion and transpose on incomplete rows. Validation: 3 tests passed.
+
+### 4 — Assemble ZIP output without argument spreads
+
+Replaced per-byte number accumulation and unbounded `push(...data)` with typed-array chunks copied into one allocated output. Added ZIP32 boundary checks. Maxima use reductions, including column autofit and Markdown export. Regression generates a 3,000-row XLSX and independently checks CRCs, all XML parts, row count and final cell through Python; also exercises 150,000-row width and Markdown calculations. Validation: 4 tests passed.

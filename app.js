@@ -178,7 +178,7 @@ function resetTableSizes() {
 }
 
 function maxColumns() {
-  return Math.max(0, ...state.rows.map((row) => row.length));
+  return state.rows.reduce((width, row) => Math.max(width, row.length), 0);
 }
 
 function colWidth(index) {
@@ -206,7 +206,7 @@ function longestLineLength(value) {
 }
 
 function autoSizeColumn(index) {
-  const maxLength = Math.max(headerName(index).length, ...state.rows.map((row) => longestLineLength(row[index])));
+  const maxLength = state.rows.reduce((longest, row) => Math.max(longest, longestLineLength(row[index])), headerName(index).length);
   state.colWidths[index] = Math.max(48, Math.ceil(maxLength * 7.2) + 24);
   const col = els.tableWrap.querySelector(`[data-col-width="${index}"]`);
   if (col) col.style.width = `${state.colWidths[index]}px`;
@@ -879,7 +879,7 @@ function markdownCell(value) {
 function currentViewMarkdown() {
   const rows = viewDataRowsOnly();
   if (!rows.length) return "";
-  const width = Math.max(...rows.map((row) => row.length));
+  const width = rows.reduce((max, row) => Math.max(max, row.length), 0);
   const normalized = rows.map((row) => Array.from({ length: width }, (_, index) => markdownCell(row[index])));
   const header = normalized[0];
   const separator = Array.from({ length: width }, () => "---");
@@ -977,64 +977,52 @@ function writeUint32(bytes, value) {
 
 function createZip(files) {
   const encoder = new TextEncoder();
-  const bytes = [];
+  const chunks = [];
   const central = [];
-
+  let offset = 0;
+  const append = bytes => { chunks.push(bytes); offset += bytes.length; };
+  if (files.length > 65535) throw new Error("Too many ZIP entries.");
   for (const file of files) {
-    const nameBytes = encoder.encode(file.name);
+    const name = encoder.encode(file.name);
     const data = encoder.encode(file.content);
+    if (name.length > 65535 || data.length > 0xffffffff) throw new Error("ZIP entry is too large.");
     const crc = crc32(data);
-    const offset = bytes.length;
-
-    writeUint32(bytes, 0x04034b50);
-    writeUint16(bytes, 20);
-    writeUint16(bytes, 0);
-    writeUint16(bytes, 0);
-    writeUint16(bytes, 0);
-    writeUint16(bytes, 0);
-    writeUint32(bytes, crc);
-    writeUint32(bytes, data.length);
-    writeUint32(bytes, data.length);
-    writeUint16(bytes, nameBytes.length);
-    writeUint16(bytes, 0);
-    bytes.push(...nameBytes, ...data);
-
-    central.push({ nameBytes, dataLength: data.length, crc, offset });
+    const entryOffset = offset;
+    const header = [];
+    writeUint32(header, 0x04034b50);
+    for (const value of [20, 0, 0, 0, 0]) writeUint16(header, value);
+    for (const value of [crc, data.length, data.length]) writeUint32(header, value);
+    writeUint16(header, name.length);
+    writeUint16(header, 0);
+    append(new Uint8Array(header));
+    append(name);
+    append(data);
+    central.push({ name, length: data.length, crc, offset: entryOffset });
   }
-
-  const centralStart = bytes.length;
+  const centralStart = offset;
   for (const entry of central) {
-    writeUint32(bytes, 0x02014b50);
-    writeUint16(bytes, 20);
-    writeUint16(bytes, 20);
-    writeUint16(bytes, 0);
-    writeUint16(bytes, 0);
-    writeUint16(bytes, 0);
-    writeUint16(bytes, 0);
-    writeUint32(bytes, entry.crc);
-    writeUint32(bytes, entry.dataLength);
-    writeUint32(bytes, entry.dataLength);
-    writeUint16(bytes, entry.nameBytes.length);
-    writeUint16(bytes, 0);
-    writeUint16(bytes, 0);
-    writeUint16(bytes, 0);
-    writeUint16(bytes, 0);
-    writeUint32(bytes, 0);
-    writeUint32(bytes, entry.offset);
-    bytes.push(...entry.nameBytes);
+    const header = [];
+    writeUint32(header, 0x02014b50);
+    for (const value of [20, 20, 0, 0, 0, 0]) writeUint16(header, value);
+    for (const value of [entry.crc, entry.length, entry.length]) writeUint32(header, value);
+    for (const value of [entry.name.length, 0, 0, 0, 0]) writeUint16(header, value);
+    writeUint32(header, 0);
+    writeUint32(header, entry.offset);
+    append(new Uint8Array(header));
+    append(entry.name);
   }
-
-  const centralSize = bytes.length - centralStart;
-  writeUint32(bytes, 0x06054b50);
-  writeUint16(bytes, 0);
-  writeUint16(bytes, 0);
-  writeUint16(bytes, central.length);
-  writeUint16(bytes, central.length);
-  writeUint32(bytes, centralSize);
-  writeUint32(bytes, centralStart);
-  writeUint16(bytes, 0);
-
-  return new Uint8Array(bytes);
+  const footer = [];
+  writeUint32(footer, 0x06054b50);
+  for (const value of [0, 0, central.length, central.length]) writeUint16(footer, value);
+  writeUint32(footer, offset - centralStart);
+  writeUint32(footer, centralStart);
+  writeUint16(footer, 0);
+  append(new Uint8Array(footer));
+  if (offset > 0xffffffff) throw new Error("ZIP64 archives are not supported.");
+  const result = new Uint8Array(offset);
+  let position = 0;
+  for (const chunk of chunks) { result.set(chunk, position); position += chunk.length; }
+  return result;
 }
 
 function createXlsx(rows) {

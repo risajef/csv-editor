@@ -38,3 +38,24 @@ test('ragged rows keep cells in their columns through movement and insertion', (
   app.run('transpose()');
   assert.deepEqual(app.json('state.rows'), [['b',''],['',''],['c','']]);
 });
+
+test('large exports avoid argument limits and preserve valid ZIP entries', () => {
+  const app = harness();
+  const bytes = app.run(`createXlsx(Array.from({length:3000},(_,i)=>[String(i)]))`);
+  const buffer = Buffer.from(bytes);
+  let offset = 0;
+  let worksheet;
+  while (buffer.readUInt32LE(offset) === 0x04034b50) {
+    const size = buffer.readUInt32LE(offset + 18);
+    const nameSize = buffer.readUInt16LE(offset + 26);
+    const name = buffer.subarray(offset + 30, offset + 30 + nameSize).toString();
+    const data = buffer.subarray(offset + 30 + nameSize, offset + 30 + nameSize + size);
+    if (name === 'xl/worksheets/sheet1.xml') worksheet = data.toString();
+    offset += 30 + nameSize + size;
+  }
+  assert.equal((worksheet.match(/<row /g) || []).length, 3000);
+  assert.match(worksheet, /<t>2999<\/t>/);
+  app.run(`state.rows=Array.from({length:150000},()=>['x','y'])`);
+  assert.equal(app.run('maxColumns()'), 2);
+  assert.ok(app.run('currentViewMarkdown().endsWith("| x | y |")'));
+});
