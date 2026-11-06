@@ -13,7 +13,7 @@ Run regression checks with `node --test --test-isolation=none tests/*.test.cjs`.
 - [x] 5. Bound rendering work and input size.
 - [x] 6. Diagnose CSV syntax and preserve empty records.
 - [x] 7. Isolate regex evaluation with cancellation and errors.
-- [ ] 8. Produce valid worksheet XML or report unsupported content.
+- [x] 8. Produce valid worksheet XML or report unsupported content.
 - [ ] Numeric missing-value and operator semantics.
 - [ ] Undo, recovery, and explicit document state boundaries.
 - [ ] Import sequencing and operation error reporting.
@@ -52,3 +52,7 @@ Extracted a pure CSV module shared by detection, import and serialization. Quoti
 ### 7 — Cancel expensive regex matching
 
 Moved matching into a disposable worker with a one-second termination deadline. Patterns compile once per request; errors are visible. New input cancels prior jobs, stale completions cannot replace the current matches, and export is blocked while matching is pending or failed. Browsers without workers show an explicit unavailable message. Regression covers worker results, invalid syntax, cancellation, stale messages and deadline termination. Validation: 9 tests passed. Deadline lifecycle is tested with a controllable timer; real-browser worker execution remains part of final QA.
+
+### 8 — Validate worksheet text before export
+
+XLSX export rejects XML-illegal characters, unpaired surrogates, overlong cells and excessive sheet dimensions with an actionable cell address where applicable. It retains Unicode, whitespace and carriage returns, and escapes literal OpenXML `_xNNNN_` sequences. Download failures are shown without altering data. Regression covers rejected controls/surrogates, cell-length bounds, literal escape sequences and visible errors. Validation: 10 tests passed. Ordinary strings remain explicit XLSX text cells.

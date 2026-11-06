@@ -942,11 +942,18 @@ async function copyMarkdown() {
 }
 
 function xmlEscape(value) {
-  return String(value ?? "")
+  const text = String(value ?? "");
+  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF\uD800-\uDFFF]/u.test(text)) {
+    throw new Error("contains a character unsupported by XML; remove it or export CSV instead.");
+  }
+  if (text.length > 32767) throw new Error("exceeds the XLSX limit of 32,767 characters per cell; export CSV instead.");
+  return text
+    .replace(/_x[0-9a-fA-F]{4}_/g, match => `_x005F_${match.slice(1)}`)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+    .replaceAll('"', "&quot;")
+    .replaceAll("\r", "&#13;");
 }
 
 function columnName(index) {
@@ -961,12 +968,15 @@ function columnName(index) {
 }
 
 function worksheetXml(rows) {
+  if (rows.length > 1048576 || rows.some(row => row.length > 16384)) throw new Error("XLSX sheet dimensions exceeded; export CSV instead.");
   const sheetData = rows
     .map((row, rowIndex) => {
       const cells = row
         .map((value, colIndex) => {
           const ref = `${columnName(colIndex)}${rowIndex + 1}`;
-          return `<c r="${ref}" t="inlineStr"><is><t>${xmlEscape(value)}</t></is></c>`;
+          let text;
+          try { text = xmlEscape(value); } catch (error) { throw new Error(`Cell ${ref} ${error.message}`); }
+          return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${text}</t></is></c>`;
         })
         .join("");
       return `<row r="${rowIndex + 1}">${cells}</row>`;
@@ -1089,6 +1099,7 @@ function createXlsx(rows) {
 }
 
 function downloadXlsx() {
+  try {
   const blob = new Blob([createXlsx(viewDataRowsOnly())], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
@@ -1098,6 +1109,8 @@ function downloadXlsx() {
   link.download = "ideo-view.xlsx";
   link.click();
   URL.revokeObjectURL(url);
+  showStatus("XLSX download prepared.");
+  } catch (error) { showStatus(error.message, true); }
 }
 
 function readFile(file) {

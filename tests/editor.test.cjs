@@ -54,7 +54,7 @@ test('large exports avoid argument limits and preserve valid ZIP entries', () =>
     offset += 30 + nameSize + size;
   }
   assert.equal((worksheet.match(/<row /g) || []).length, 3000);
-  assert.match(worksheet, /<t>2999<\/t>/);
+  assert.match(worksheet, /<t xml:space="preserve">2999<\/t>/);
   app.run(`state.rows=Array.from({length:150000},()=>['x','y'])`);
   assert.equal(app.run('maxColumns()'), 2);
   assert.ok(app.run('currentViewMarkdown().endsWith("| x | y |")'));
@@ -145,4 +145,17 @@ test('regex timeout terminates work and syntax failures are explicit', () => {
   assert.match(response.error, /Invalid regex/);
   self.onmessage({data:{filters:[{id:'r',pattern:'^a',values:['abc','xyz']}]}});
   assert.deepEqual(JSON.parse(JSON.stringify(response.matches)), [{id:'r',indices:[1]}]);
+});
+
+test('XLSX rejects unsupported characters with a cell address and preserves text', () => {
+  const app = harness();
+  for (const value of ['x\u0001y', '\uD800', '\uFFFF', 'x'.repeat(32768)]) {
+    assert.throws(() => app.run(`createXlsx([['h'],[${JSON.stringify(value)}]])`), /Cell A2/);
+  }
+  const xml = app.run(String.raw`worksheetXml([[' a\r\n b & < 😀 _x0041_']])`);
+  assert.match(xml, /xml:space="preserve"/);
+  assert.match(xml, /&#13;\n/);
+  assert.match(xml, /&amp; &lt; 😀 _x005F_x0041_/);
+  app.run(String.raw`state.rows=[['h'],['bad\u0001']];downloadXlsx()`);
+  assert.match(app.run('els.operation.textContent'), /Cell A2/);
 });
