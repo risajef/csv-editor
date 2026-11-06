@@ -484,17 +484,17 @@ function addFilter() {
 }
 
 function setFilter(id, patch) {
-  state.filters = state.filters.map((filter) => (filter.id === id ? { ...filter, ...patch } : filter));
-  renderFilters();
-  renderTable();
-  renderStats();
+  state.filters = state.filters.map(filter => filter.id === id ? { ...filter, ...patch } : filter);
+  render();
+  scheduleDraft();
 }
 
 function deleteFilter(id) {
-  state.filters = state.filters.filter((filter) => filter.id !== id);
-  renderFilters();
-  renderTable();
-  renderStats();
+  const hadFocus = document.activeElement?.dataset?.filterId === id;
+  state.filters = state.filters.filter(filter => filter.id !== id);
+  render();
+  if (hadFocus) els.addFilter.focus();
+  scheduleDraft();
 }
 
 function operatorOptions(numeric, activeOperator) {

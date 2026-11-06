@@ -57,6 +57,19 @@ const root = path.resolve(__dirname, '..');
     await page.keyboard.down('Shift'); await page.keyboard.press('Tab'); await page.keyboard.up('Shift');
     assert.equal(await page.evaluate(() => document.activeElement.dataset.cell), '1:0');
 
+    await page.evaluate(() => loadText('id,status\n1,ok\n2,bad'));
+    await page.click('#add-filter');
+    await page.focus('[data-filter-field="column"]');
+    await page.select('[data-filter-field="column"]', '1');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.filterField), 'column');
+    await page.type('[data-filter-field="value"]', 'ok');
+    assert.equal(await page.evaluate(() => currentViewCsv()), 'id,status\n1,ok');
+    await page.click('[data-filter-field="enabled"]');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.filterField), 'enabled');
+    assert.equal(await page.evaluate(() => currentViewCsv()), 'id,status\n1,ok\n2,bad');
+    await page.click('[aria-label="Delete filter on status"]');
+    assert.equal(await page.$eval('#filters-list', element => element.textContent), 'No filters enabled.');
+
     await page.evaluate(() => {
       loadText('v\nabc\nxyz');
       state.filters = [{id:'regex', enabled:true, column:0, operator:'regex', value:'^a'}];

@@ -100,3 +100,7 @@ Extracted structural commands/reference remapping into `document.js`, projection
 ### 19 — Keep recovery failures outside document transactions
 
 Final edge-case checks found that a restricted browser origin can throw when the `sessionStorage` property is accessed, before a save attempt. Draft scheduling now defers that access to the guarded saver, so imports, edits and undo remain usable. Recovery snapshots are fully validated before assigning any document fields, rejecting incompatible/corrupt data without partially replacing current work. Validation: 24 Node tests passed, including a throwing storage getter and malformed recovery snapshots.
+
+### 20 — Preserve focus while changing filter controls
+
+Filter selection/toggle changes now use the same focus-preserving render boundary as document refreshes. Deleting a focused filter returns keyboard focus to Add filter; view changes also schedule recovery saves. The browser regression now exercises choosing a column, typing equality text, disabling the filter and deleting it, checking both exported matches and focused controls. Validation: 24 Node tests and the expanded Chromium smoke suite passed.
