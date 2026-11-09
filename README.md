@@ -66,7 +66,7 @@ The optional real-browser suite uses Puppeteer available in this checkout or a p
 node tests/browser-smoke.cjs
 ```
 
-It starts a temporary loopback server, launches headless Chromium and cleans up both. It checks native focus/click interactions and worker matching/cancellation. It needs an environment that permits Chromium and loopback sockets. See [FIX_PROGRESS.md](FIX_PROGRESS.md) for completed fixes and verification details. The review's original requirements discussion remains in [requirements.md](requirements.md).
+It starts a temporary loopback server, launches headless Chromium and cleans up both. It checks native focus/click interactions and worker matching/cancellation. It needs an environment that permits Chromium and loopback sockets. The review's original requirements discussion remains in [requirements.md](requirements.md).
 
 ## Code boundaries
 
